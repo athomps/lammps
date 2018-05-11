@@ -81,9 +81,10 @@ protected:
   int **i_inside;
   double **i_wj;
   double **i_rcutij;
+  int **i_element;
   int *i_ninside;
-  double ****i_uarraytot_r, ****i_uarraytot_i;
-  double ******i_zarray_r, ******i_zarray_i;
+  double *****i_uarraytot_r, *****i_uarraytot_i;
+  double *******i_zarray_r, *******i_zarray_i;
 
 #ifdef TIMING_INFO
   //  timespec starttime, endtime;
@@ -98,6 +99,7 @@ protected:
   double **coeffelem;           // element bispectrum coefficients
   int *map;                     // mapping from atom types to elements
   int twojmax, diagonalstyle, switchflag, bzeroflag, quadraticflag;
+  int alloyflag;
   double rcutfac, rfac0, rmin0, wj1, wj2;
   int rcutfacflag, twojmaxflag; // flags for required parameters
 };

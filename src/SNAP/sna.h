@@ -31,7 +31,8 @@ struct SNA_LOOPINDICES {
 class SNA : protected Pointers {
 
 public:
-  SNA(LAMMPS*, double, int, int, int, double, int, int);
+  SNA(LAMMPS*, double, int, int, int, double, int, int,
+      int, int);
 
   SNA(LAMMPS* lmp) : Pointers(lmp) {};
   ~SNA();
@@ -52,9 +53,8 @@ public:
 
   // functions for derivatives
 
-  void compute_duidrj(double*, double, double);
+  void compute_duidrj(double*, double, double, int);
   void compute_dbidrj();
-  void compute_dbidrj_nonsymm();
   void copy_dbi2dbvec();
   double compute_sfac(double, double);
   double compute_dsfac(double, double);
@@ -73,15 +73,16 @@ public:
   int* inside;
   double* wj;
   double* rcutij;
+  int* element;  // index on [0,nelements)
   int nmax;
 
   void grow_rij(int);
 
   int twojmax, diagonalstyle;
-  double*** uarraytot_r, *** uarraytot_i;
-  double***** zarray_r, ***** zarray_i;
-  double*** uarraytot_r_b, *** uarraytot_i_b;
-  double***** zarray_r_b, ***** zarray_i_b;
+  double**** uarraytot_r, **** uarraytot_i;
+  double****** zarray_r, ****** zarray_i;
+  double**** uarraytot_r_b, **** uarraytot_i_b;
+  double****** zarray_r_b, ****** zarray_i_b;
   double*** uarray_r, *** uarray_i;
 
 private:
@@ -90,17 +91,19 @@ private:
   //use indexlist instead of loops, constructor generates these
   SNA_LOOPINDICES* idxj;
   int idxj_max;
+
   // data for bispectrum coefficients
 
   double***** cgarray;
   double** rootpqarray;
-  double*** barray;
+  double**** barray;
 
   // derivatives of data
 
   double**** duarray_r, **** duarray_i;
-  double**** dbarray;
-
+  double***** dbarray;
+  int elem_duarray; // element of j in derivative
+  
   static const int nmaxfactorial = 167;
   static const double nfac_table[];
   double factorial(int);
@@ -114,14 +117,14 @@ private:
   void print_clebsch_gordan(FILE*);
   void zero_uarraytot();
   void addself_uarraytot(double);
-  void add_uarraytot(double, double, double);
-  void add_uarraytot_omp(double, double, double);
+  void add_uarraytot(double, double, double, int);
+  void add_uarraytot_omp(double, double, double, int);
   void compute_uarray(double, double, double,
                       double, double);
   void compute_uarray_omp(double, double, double,
                           double, double, int);
   double deltacg(int, int, int);
-  int compute_ncoeff();
+  void compute_ncoeff();
   void compute_duarray(double, double, double,
                        double, double, double, double, double);
 
@@ -141,6 +144,11 @@ private:
 
   int bzero_flag; // 1 if bzero subtracted from barray
   double *bzero;  // array of B values for isolated atoms
+
+  int alloy_flag; // 1 for multi-element bispectrum components
+  int nelements;  // number of elements
+  int ntriples;   // number of multi-element triplets
+  int ndoubles;   // number of multi-element pairs
 };
 
 }

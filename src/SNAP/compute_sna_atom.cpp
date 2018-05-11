@@ -30,13 +30,11 @@
 using namespace LAMMPS_NS;
 
 ComputeSNAAtom::ComputeSNAAtom(LAMMPS *lmp, int narg, char **arg) :
-  Compute(lmp, narg, arg), cutsq(NULL), list(NULL), sna(NULL),
-  radelem(NULL), wjelem(NULL)
+  Compute(lmp, narg, arg), cutsq(NULL), list(NULL), sna(NULL), 
+  radelem(NULL), wjelem(NULL), map(NULL)
 {
   double rmin0, rfac0;
   int twojmax, switchflag, bzeroflag;
-  radelem = NULL;
-  wjelem = NULL;
 
   int ntypes = atom->ntypes;
   int nargmin = 6+2*ntypes;
@@ -50,7 +48,8 @@ ComputeSNAAtom::ComputeSNAAtom(LAMMPS *lmp, int narg, char **arg) :
   switchflag = 1;
   bzeroflag = 1;
   quadraticflag = 0;
-
+  alloyflag = 0;
+  
   // offset by 1 to match up with types
 
   memory->create(radelem,ntypes+1,"sna/atom:radelem");
@@ -112,6 +111,20 @@ ComputeSNAAtom::ComputeSNAAtom(LAMMPS *lmp, int narg, char **arg) :
         error->all(FLERR,"Illegal compute sna/atom command");
       quadraticflag = atoi(arg[iarg+1]);
       iarg += 2;
+    } else if (strcmp(arg[iarg],"alloy") == 0) {
+      if (iarg+2+ntypes > narg)
+        error->all(FLERR,"Illegal compute sna/atom command");
+      alloyflag = 1;
+      memory->create(map,ntypes+1,"compute_sna_atom:map");
+      nelements = force->inumeric(FLERR,arg[iarg+1]);
+      for(int i = 0; i < ntypes; i++) {
+        int jelem = force->inumeric(FLERR,arg[iarg+2+i]);
+        printf("%d %d %d %d\n",ntypes,nelements,i,jelem);
+        if (jelem < 0 || jelem >= nelements)
+          error->all(FLERR,"Illegal compute sna/atom command");
+        map[i+1] = jelem;
+      }
+      iarg += 2+ntypes;
     } else error->all(FLERR,"Illegal compute sna/atom command");
   }
 
@@ -124,11 +137,13 @@ ComputeSNAAtom::ComputeSNAAtom(LAMMPS *lmp, int narg, char **arg) :
 
     // always unset use_shared_arrays since it does not work with computes
     snaptr[tid] = new SNA(lmp,rfac0,twojmax,diagonalstyle,
-                          0 /*use_shared_arrays*/, rmin0,switchflag,bzeroflag);
+                          0 /*use_shared_arrays*/, rmin0,switchflag,bzeroflag,
+                          alloyflag,nelements);
   }
 
   ncoeff = snaptr[0]->ncoeff;
   size_peratom_cols = ncoeff;
+  
   if (quadraticflag) size_peratom_cols += (ncoeff*(ncoeff+1))/2;
   peratom_flag = 1;
 
@@ -146,6 +161,7 @@ ComputeSNAAtom::~ComputeSNAAtom()
   memory->destroy(radelem);
   memory->destroy(wjelem);
   memory->destroy(cutsq);
+  memory->destroy(map);
   delete [] snaptr;
 }
 
@@ -254,6 +270,7 @@ void ComputeSNAAtom::compute_peratom()
         const double delz = ztmp - x[j][2];
         const double rsq = delx*delx + dely*dely + delz*delz;
         int jtype = type[j];
+        int jelem = map[jtype];
         if (rsq < cutsq[itype][jtype] && rsq>1e-20) {
           snaptr[tid]->rij[ninside][0] = delx;
           snaptr[tid]->rij[ninside][1] = dely;
@@ -261,6 +278,7 @@ void ComputeSNAAtom::compute_peratom()
           snaptr[tid]->inside[ninside] = j;
           snaptr[tid]->wj[ninside] = wjelem[jtype];
           snaptr[tid]->rcutij[ninside] = (radi+radelem[jtype])*rcutfac;
+          snaptr[tid]->element[ninside] = jelem; // element index for multi-element snap
           ninside++;
         }
       }

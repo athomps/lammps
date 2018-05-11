@@ -41,7 +41,8 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-PairSNAP::PairSNAP(LAMMPS *lmp) : Pair(lmp)
+PairSNAP::PairSNAP(LAMMPS *lmp) : Pair(lmp), elements(NULL), radelem(NULL),
+  wjelem(NULL), coeffelem(NULL), map(NULL)
 {
   single_enable = 0;
   restartinfo = 0;
@@ -49,10 +50,6 @@ PairSNAP::PairSNAP(LAMMPS *lmp) : Pair(lmp)
   manybody_flag = 1;
 
   nelements = 0;
-  elements = NULL;
-  radelem = NULL;
-  wjelem = NULL;
-  coeffelem = NULL;
 
   nmax = 0;
   nthreads = 1;
@@ -81,12 +78,13 @@ PairSNAP::PairSNAP(LAMMPS *lmp) : Pair(lmp)
   i_inside = NULL;
   i_wj = NULL;
   i_rcutij = NULL;
+  i_element = NULL;
   i_ninside = NULL;
   i_pairs = NULL;
   i_uarraytot_r = NULL;
   i_uarraytot_i = NULL;
   i_zarray_r = NULL;
-  i_zarray_i =NULL;
+  i_zarray_i = NULL;
 
   use_shared_arrays = 0;
 
@@ -230,6 +228,7 @@ void PairSNAP::compute_regular(int eflag, int vflag)
         snaptr->inside[ninside] = j;
         snaptr->wj[ninside] = wjelem[jelem];
         snaptr->rcutij[ninside] = (radi + radelem[jelem])*rcutfac;
+        snaptr->element[ninside] = jelem; // element index for multi-element snap
         ninside++;
       }
     }
@@ -251,8 +250,8 @@ void PairSNAP::compute_regular(int eflag, int vflag)
 
     for (int jj = 0; jj < ninside; jj++) {
       int j = snaptr->inside[jj];
-      snaptr->compute_duidrj(snaptr->rij[jj],
-                             snaptr->wj[jj],snaptr->rcutij[jj]);
+      snaptr->compute_duidrj(snaptr->rij[jj],snaptr->wj[jj],
+                             snaptr->rcutij[jj],snaptr->element[jj]);
 
       snaptr->compute_dbidrj();
       snaptr->copy_dbi2dbvec();
@@ -286,7 +285,6 @@ void PairSNAP::compute_regular(int eflag, int vflag)
             double facki = coeffi[k]*bveci;
             double fackj = coeffi[k]*snaptr->bvec[jcoeff];
             double* dbvecj = snaptr->dbvec[jcoeff];
-
             fij[0] += facki*dbvecj[0]+fackj*dbveci[0];
             fij[1] += facki*dbvecj[1]+fackj*dbveci[1];
             fij[2] += facki*dbvecj[2]+fackj*dbveci[2];
@@ -563,6 +561,7 @@ void PairSNAP::compute_optimized(int eflag, int vflag)
           // inside = indices of neighbors of I within cutoff
           // wj = weights of neighbors of I within cutoff
           // rcutij = cutoffs of neighbors of I within cutoff
+          // element = element index for multi-element snap
           // note Rij sign convention => dU/dRij = dU/dRj = -dU/dRi
 
           ninside = 0;
@@ -583,6 +582,7 @@ void PairSNAP::compute_optimized(int eflag, int vflag)
               sna[tid]->inside[ninside] = j;
               sna[tid]->wj[ninside] = wjelem[jelem];
               sna[tid]->rcutij[ninside] = (radi + radelem[jelem])*rcutfac;
+              sna[tid]->element[ninside] = jelem;
               ninside++;
 
               // update index list with inside index
@@ -613,8 +613,8 @@ void PairSNAP::compute_optimized(int eflag, int vflag)
       if (pairs[iijj][2] >= 0) {
         jj = pairs[iijj][2];
         int j = sna[tid]->inside[jj];
-        sna[tid]->compute_duidrj(sna[tid]->rij[jj],
-                                 sna[tid]->wj[jj],sna[tid]->rcutij[jj]);
+        sna[tid]->compute_duidrj(sna[tid]->rij[jj],sna[tid]->wj[jj],
+                                 sna[tid]->rcutij[jj],sna[tid]->element[jj]);
 
         sna[tid]->compute_dbidrj();
         sna[tid]->copy_dbi2dbvec();
@@ -1092,6 +1092,7 @@ void PairSNAP::set_sna_to_shared(int snaid,int i)
   sna[snaid]->inside = i_inside[i];
   sna[snaid]->wj = i_wj[i];
   sna[snaid]->rcutij = i_rcutij[i];
+  sna[snaid]->element = i_element[i];
   sna[snaid]->zarray_r = i_zarray_r[i];
   sna[snaid]->zarray_i = i_zarray_i[i];
   sna[snaid]->uarraytot_r = i_uarraytot_r[i];
@@ -1124,12 +1125,14 @@ void PairSNAP::build_per_atom_arrays()
     memory->destroy(i_inside);
     memory->destroy(i_wj);
     memory->destroy(i_rcutij);
+    memory->destroy(i_element);
     memory->destroy(i_ninside);
     memory->destroy(i_pairs);
     memory->create(i_rij,i_maxt,i_neighmax,3,"PairSNAP::i_rij");
     memory->create(i_inside,i_maxt,i_neighmax,"PairSNAP::i_inside");
     memory->create(i_wj,i_maxt,i_neighmax,"PairSNAP::i_wj");
     memory->create(i_rcutij,i_maxt,i_neighmax,"PairSNAP::i_rcutij");
+    memory->create(i_element,i_maxt,i_neighmax,"PairSNAP::i_element");
     memory->create(i_ninside,i_maxt,"PairSNAP::i_ninside");
     memory->create(i_pairs,i_maxt*i_neighmax,4,"PairSNAP::i_pairs");
   }
@@ -1138,10 +1141,11 @@ void PairSNAP::build_per_atom_arrays()
     int jdim = sna[0]->twojmax+1;
     memory->destroy(i_uarraytot_r);
     memory->destroy(i_uarraytot_i);
-    memory->create(i_uarraytot_r,count,jdim,jdim,jdim,
+    memory->create(i_uarraytot_r,count,nelements,jdim,jdim,jdim,
                    "PairSNAP::i_uarraytot_r");
-    memory->create(i_uarraytot_i,count,jdim,jdim,jdim,
+    memory->create(i_uarraytot_i,count,nelements,jdim,jdim,jdim,
                    "PairSNAP::i_uarraytot_i");
+
     if (i_zarray_r != NULL)
       for (int i = 0; i < i_max; i++) {
         memory->destroy(i_zarray_r[i]);
@@ -1150,12 +1154,13 @@ void PairSNAP::build_per_atom_arrays()
 
     delete [] i_zarray_r;
     delete [] i_zarray_i;
-    i_zarray_r = new double*****[count];
-    i_zarray_i = new double*****[count];
+    i_zarray_r = new double******[count];
+    i_zarray_i = new double******[count];
+    int ndoubles = (nelements+1)*nelements/2.0;
     for (int i = 0; i < count; i++) {
-      memory->create(i_zarray_r[i],jdim,jdim,jdim,jdim,jdim,
+      memory->create(i_zarray_r[i],ndoubles,jdim,jdim,jdim,jdim,jdim,
                      "PairSNAP::i_zarray_r");
-      memory->create(i_zarray_i[i],jdim,jdim,jdim,jdim,jdim,
+      memory->create(i_zarray_i[i],ndoubles,jdim,jdim,jdim,jdim,jdim,
                      "PairSNAP::i_zarray_i");
     }
   }
@@ -1198,6 +1203,7 @@ void PairSNAP::build_per_atom_arrays()
           i_inside[count][ninside] = j;
           i_wj[count][ninside] = wjelem[jelem];
           i_rcutij[count][ninside] = (radi + radelem[jelem])*rcutfac;
+          i_element[count][ninside] = jelem; // element index for multi-element snap
 
           // update index list with inside index
           i_pairs[i_numpairs][2] = ninside++;
@@ -1242,6 +1248,7 @@ void PairSNAP::build_per_atom_arrays()
         i_inside[count][ninside] = j;
         i_wj[count][ninside] = wjelem[jelem];
         i_rcutij[count][ninside] = (radi + radelem[jelem])*rcutfac;
+        i_element[count][ninside] = jelem; // element index for multi-element snap
         // update index list with inside index
         i_pairs[i_numpairs][2] = ninside++;
       }
@@ -1471,8 +1478,9 @@ void PairSNAP::coeff(int narg, char **arg)
     ncoeffq = (ncoeff*(ncoeff+1))/2;
     int ntmp = 1+ncoeff+ncoeffq;
     if (ntmp != ncoeffall) {
-      printf("ncoeffall = %d ntmp = %d ncoeff = %d \n",ncoeffall,ntmp,ncoeff);
-      error->all(FLERR,"Incorrect SNAP coeff file");
+      if (comm->me == 0) {
+        printf("ncoeffall = %d ntmp = %d ncoeff = %d \n",ncoeffall,ntmp,ncoeff);
+        error->all(FLERR,"Incorrect SNAP coeff file");
     }
   }
 
@@ -1524,16 +1532,18 @@ void PairSNAP::coeff(int narg, char **arg)
     int tid = omp_get_thread_num();
     sna[tid] = new SNA(lmp,rfac0,twojmax,
                        diagonalstyle,use_shared_arrays,
-                       rmin0,switchflag,bzeroflag);
+                       rmin0,switchflag,bzeroflag,
+                       alloyflag,nelements);
     if (!use_shared_arrays)
       sna[tid]->grow_rij(nmax);
   }
 
-  if (comm->me == 0)
     if (ncoeff != sna[0]->ncoeff) {
-      printf("ncoeff = %d snancoeff = %d \n",ncoeff,sna[0]->ncoeff);
+      if (comm->me == 0)
+        printf("ncoeff = %d snancoeff = %d \n",ncoeff,sna[0]->ncoeff);
       error->all(FLERR,"Incorrect SNAP parameter file");
     }
+  }
 
   // Calculate maximum cutoff for all elements
 
@@ -1749,6 +1759,7 @@ void PairSNAP::read_files(char *coefffilename, char *paramfilename)
   switchflag = 1;
   bzeroflag = 1;
   quadraticflag = 0;
+  alloyflag = 1;
 
   // open SNAP parameter file on proc 0
 
@@ -1814,6 +1825,8 @@ void PairSNAP::read_files(char *coefffilename, char *paramfilename)
       bzeroflag = atoi(keyval);
     else if (strcmp(keywd,"quadraticflag") == 0)
       quadraticflag = atoi(keyval);
+    else if (strcmp(keywd,"alloyflag") == 0)
+      alloyflag = atoi(keyval);
     else
       error->all(FLERR,"Incorrect SNAP parameter file");
   }
@@ -1841,4 +1854,3 @@ double PairSNAP::memory_usage()
   bytes += sna[0]->memory_usage()*nthreads;
   return bytes;
 }
-
