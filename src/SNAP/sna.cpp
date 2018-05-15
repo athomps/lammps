@@ -1421,13 +1421,27 @@ double SNA::memory_usage()
 {
   int jdim = twojmax + 1;
   double bytes;
-  bytes = jdim * jdim * jdim * jdim * jdim * sizeof(double);
-  bytes += 2 * jdim * jdim * jdim * sizeof(complex<double>);
-  bytes += 2 * jdim * jdim * jdim * sizeof(double);
-  bytes += jdim * jdim * jdim * 3 * sizeof(complex<double>);
-  bytes += jdim * jdim * jdim * 3 * sizeof(double);
-  bytes += ncoeff * sizeof(double);
-  bytes += jdim * jdim * jdim * jdim * jdim * sizeof(complex<double>);
+  // cgarray
+  bytes = jdim*jdim*jdim*jdim*jdim*sizeof(double);
+  // rootpqarray
+  bytes += (jdim+1)*(jdim+1)*sizeof(double);
+  // barray, dbarray
+  bytes += 4*ntriples*jdim*jdim*jdim*sizeof(double);
+  // uarray_r, uarray_i, duarray_r, duarray_i
+  bytes += 2*4*ntriples*jdim*jdim*jdim*sizeof(double);
+  // bzero
+  if (bzero_flag) bytes += jdim*sizeof(double);
+  // uarraytot_r, uarraytot_i
+  bytes += 2*nelements*jdim*jdim*jdim*sizeof(double);
+  // zarraytot_r, zarraytot_i
+  bytes += 2*ndoubles*jdim*jdim*jdim*jdim*jdim*sizeof(double);
+  // bvec, dbvec
+  bytes += 4*ncoeff*sizeof(double);
+  // rij, wj, rcutij
+  bytes += 5*nmax*sizeof(double);
+  // inside, element
+  bytes += 2*nmax*sizeof(int);
+
   return bytes;
 }
 
@@ -1461,14 +1475,12 @@ void SNA::create_twojmax_arrays()
   else
     bzero = NULL;
   
-
   if(!use_shared_arrays) {
     memory->create(uarraytot_r, nelements, jdim, jdim, jdim,
                    "sna:uarraytot");
     memory->create(uarraytot_i, nelements, jdim, jdim, jdim,
                    "sna:uarraytot");
 
-    int ndoubles = (nelements+1)*nelements/2.0;
     memory->create(zarray_r, ndoubles, jdim, jdim, jdim, jdim, jdim,
                    "sna:zarray");
     memory->create(zarray_i, ndoubles, jdim, jdim, jdim, jdim, jdim,
@@ -1873,6 +1885,7 @@ void SNA::compute_ncoeff()
           if (j >= j1) ncount++;
     }
 
+  ndoubles = (nelements+1)*nelements/2.0;
   ntriples = (nelements+2)*(nelements+1)*nelements/6.0;
   ncoeff = ncount*ntriples;
 }

@@ -1441,7 +1441,7 @@ void PairSNAP::coeff(int narg, char **arg)
 
   nelements = narg - 4 - atom->ntypes;
   if (nelements < 1) error->all(FLERR,"Incorrect args for pair coefficients");
-
+  printf("nelements = %d\n",nelements);
   char* type1 = arg[0];
   char* type2 = arg[1];
   char* coefffilename = arg[2];
@@ -1477,17 +1477,19 @@ void PairSNAP::coeff(int narg, char **arg)
     ncoeff = sqrt(2*ncoeffall)-1;
     ncoeffq = (ncoeff*(ncoeff+1))/2;
     int ntmp = 1+ncoeff+ncoeffq;
-    if (ntmp != ncoeffall) {
+    if (ntmp != ncoeffall)
       if (comm->me == 0) {
-        printf("ncoeffall = %d ntmp = %d ncoeff = %d \n",ncoeffall,ntmp,ncoeff);
+        printf("ncoeffall = %d ntmp = %d ncoeff = %d \n",
+               ncoeffall,ntmp,ncoeff);
         error->all(FLERR,"Incorrect SNAP coeff file");
-    }
+      }
   }
 
   // read args that map atom types to SNAP elements
   // map[i] = which element the Ith atom type is, -1 if not mapped
   // map[0] is not used
 
+  printf("ntypes %d\n",atom->ntypes);
   for (int i = 1; i <= atom->ntypes; i++) {
     char* elemname = elemtypes[i-1];
     int jelem;
@@ -1499,6 +1501,7 @@ void PairSNAP::coeff(int narg, char **arg)
       map[i] = jelem;
     else if (strcmp(elemname,"NULL") == 0) map[i] = -1;
     else error->all(FLERR,"Incorrect args for pair coefficients");
+    printf("elem %d %s %d %d\n",i,elemname,jelem,map[i]);
   }
 
   // clear setflag since coeff() called once with I,J = * *
@@ -1512,12 +1515,13 @@ void PairSNAP::coeff(int narg, char **arg)
 
   int count = 0;
   for (int i = 1; i <= n; i++)
-    for (int j = i; j <= n; j++)
+    for (int j = i; j <= n; j++) {
       if (map[i] >= 0 && map[j] >= 0) {
         setflag[i][j] = 1;
         count++;
       }
-
+    }
+  
   if (count == 0) error->all(FLERR,"Incorrect args for pair coefficients");
 
   sna = new SNA*[nthreads];
@@ -1538,14 +1542,13 @@ void PairSNAP::coeff(int narg, char **arg)
       sna[tid]->grow_rij(nmax);
   }
 
-    if (ncoeff != sna[0]->ncoeff) {
-      if (comm->me == 0)
-        printf("ncoeff = %d snancoeff = %d \n",ncoeff,sna[0]->ncoeff);
-      error->all(FLERR,"Incorrect SNAP parameter file");
-    }
+  if (ncoeff != sna[0]->ncoeff) {
+    if (comm->me == 0)
+      printf("ncoeff = %d snancoeff = %d \n",ncoeff,sna[0]->ncoeff);
+    error->all(FLERR,"Incorrect SNAP parameter file");
   }
 
-  // Calculate maximum cutoff for all elements
+// Calculate maximum cutoff for all elements
 
   rcutmax = 0.0;
   for (int ielem = 0; ielem < nelements; ielem++)
