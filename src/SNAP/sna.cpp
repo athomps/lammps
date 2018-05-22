@@ -153,7 +153,7 @@ SNA::SNA(LAMMPS* lmp, double rfac0_in,
   if (bzero_flag) {
     double www = wself*wself*wself;
     for(int j = 0; j <= twojmax; j++)
-      bzero[j] = www*(j+1);
+      bzero[j] = www;
   }
 
 #ifdef TIMING_INFO
@@ -411,6 +411,7 @@ void SNA::compute_zi()
   //                sumb1 += cg(j1,mb1,j2,mb2,j) *
   //                  u(j1,ma1,mb1) * u(j2,ma2,mb2)
   //              z(j1,j2,j,ma,mb) += sumb1*cg(j1,ma1,j2,ma2,j)
+  //        z(j1,j2,j,ma,mb) /= j+1
 
 #ifdef TIMING_INFO
   clock_gettime(CLOCK_REALTIME, &starttime);
@@ -453,9 +454,9 @@ void SNA::compute_zi()
               } // end loop over mb1
 
               zarray_r[idouble][j1][j2][j][ma][mb] +=
-                sumb1_r * cgarray[j1][j2][j][ma1][ma2];
+                sumb1_r * cgarray[j1][j2][j][ma1][ma2]/(j+1);
               zarray_i[idouble][j1][j2][j][ma][mb] +=
-                sumb1_i * cgarray[j1][j2][j][ma1][ma2];
+                sumb1_i * cgarray[j1][j2][j][ma1][ma2]/(j+1);
             } // end loop over ma1
           } // end loop over ma, mb
       } // end loop over j
@@ -486,6 +487,7 @@ void SNA::compute_zi_omp(int sub_threads)
   //                sumb1 += cg(j1,mb1,j2,mb2,j) *
   //                  u(j1,ma1,mb1) * u(j2,ma2,mb2)
   //              z(j1,j2,j,ma,mb) += sumb1*cg(j1,ma1,j2,ma2,j)
+  //        z(j1,j2,j,ma,mb) /= j+1
 
   if(omp_in_parallel())
     omp_set_num_threads(sub_threads);
@@ -533,9 +535,9 @@ void SNA::compute_zi_omp(int sub_threads)
           }
 
           zarray_r[idouble][j1][j2][j][ma][mb] +=
-            sumb1_r * cgarray[j1][j2][j][ma1][ma2];
+            sumb1_r * cgarray[j1][j2][j][ma1][ma2]/(j+1);
           zarray_i[idouble][j1][j2][j][ma][mb] +=
-            sumb1_i * cgarray[j1][j2][j][ma1][ma2];
+            sumb1_i * cgarray[j1][j2][j][ma1][ma2]/(j+1);
         }
       }
   }
@@ -556,7 +558,7 @@ void SNA::compute_bi()
   //        for mb = 0,...,jmid
   //          for ma = 0,...,j
   //            b(j1,j2,j) +=
-  //              2*Conj(u(j,ma,mb))*z(j1,j2,j,ma,mb)
+  //              2*Conj(u(j,ma,mb))*z(j1,j2,j,ma,mb)/(j+1)
 
 #ifdef TIMING_INFO
   clock_gettime(CLOCK_REALTIME, &starttime);
@@ -712,19 +714,19 @@ void SNA::compute_dbidrj()
   //          for ma = 0,...,j
   //            zdb +=
   //              Conj(dudr(j,ma,mb))*z(j1,j2,j,ma,mb)
-  //        dbdr(j1,j2,j) += 2*zdb
+  //        dbdr(j1,j2,j) += 2*zdu
   //        zdb = 0
   //        for mb1 = 0,...,j1mid
   //          for ma1 = 0,...,j1
   //            zdb +=
   //              Conj(dudr(j1,ma1,mb1))*z(j,j2,j1,ma1,mb1)
-  //        dbdr(j1,j2,j) += 2*zdb*(j+1)/(j1+1)
+  //        dbdr(j1,j2,j) += 2*zdu
   //        zdb = 0
   //        for mb2 = 0,...,j2mid
   //          for ma2 = 0,...,j2
   //            zdb +=
   //              Conj(dudr(j2,ma2,mb2))*z(j1,j,j2,ma2,mb2)
-  //        dbdr(j1,j2,j) += 2*zdb*(j+1)/(j2+1)
+  //        dbdr(j1,j2,j) += 2*zdu
 
   double* dbdr;
   double* dudr_r, *dudr_i;
@@ -827,8 +829,6 @@ void SNA::compute_dbidrj()
 
     if (elem1 == elem_duarray) {
 
-    double j1fac = (j+1)/(j1+1.0);
-
     for(int k = 0; k < 3; k++)
       sumzdu_r[k] = 0.0;
 
@@ -884,14 +884,13 @@ void SNA::compute_dbidrj()
     } // end if j1even
 
     for(int k = 0; k < 3; k++)
-      dbdr[k] += 2.0*sumzdu_r[k]*j1fac;
+      dbdr[k] += 2.0*sumzdu_r[k];
 
     } // end if elem1 == elem_duarray
     
     // Sum over Conj(dudr(j2,ma2,mb2))*z(j1,j,j2,ma2,mb2)
 
     if (elem2 == elem_duarray) {
-    double j2fac = (j+1)/(j2+1.0);
 
     for(int k = 0; k < 3; k++)
       sumzdu_r[k] = 0.0;
@@ -948,7 +947,7 @@ void SNA::compute_dbidrj()
     } // end if j2even
 
     for(int k = 0; k < 3; k++)
-      dbdr[k] += 2.0*sumzdu_r[k]*j2fac;
+      dbdr[k] += 2.0*sumzdu_r[k];
 
     } // end if elem2 == elem_duarray
     
