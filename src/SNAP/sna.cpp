@@ -419,11 +419,11 @@ void SNA::compute_zi()
 
   // compute_dbidrj() requires full j1/j2/j chunk of z elements
   // use zarray j1/j2 symmetry
-  // loop over all unique element pairs (elem1, elem2)
+  // loop over all element pairs (elem1, elem2)
   
   int idouble = 0;
   for(int elem1 = 0; elem1 < nelements; elem1++)
-  for(int elem2 = elem1; elem2 < nelements; elem2++) {
+  for(int elem2 = 0; elem2 < nelements; elem2++) {
   for(int j1 = 0; j1 <= twojmax; j1++)
     for(int j2 = 0; j2 <= j1; j2++) {
       for(int j = j1 - j2; j <= MIN(twojmax, j1 + j2); j += 2) {
@@ -494,11 +494,11 @@ void SNA::compute_zi_omp(int sub_threads)
 
   // compute_dbidrj() requires full j1/j2/j chunk of z elements
   // use zarray j1/j2 symmetry
-  // loop over all unique element pairs (elem1, elem2)
+  // loop over all element pairs (elem1, elem2)
   
   int idouble = 0;
   for(int elem1 = 0; elem1 < nelements; elem1++)
-  for(int elem2 = elem1; elem2 < nelements; elem2++) {
+  for(int elem2 = 0; elem2 < nelements; elem2++) {
   
 #if defined(_OPENMP)
 #pragma omp parallel for schedule(auto) default(none) shared(idouble,elem1,elem2)
@@ -564,13 +564,13 @@ void SNA::compute_bi()
   clock_gettime(CLOCK_REALTIME, &starttime);
 #endif
 
-  // loop over all unique element triples (elem1, elem2, elem3)
+  // loop over all element triples (elem1, elem2, elem3)
   
   int itriple = 0;
   int idouble = 0;
   for(int elem1 = 0; elem1 < nelements; elem1++)
-  for(int elem2 = elem1; elem2 < nelements; elem2++) {
-  for(int elem3 = elem2; elem3 < nelements; elem3++) {
+  for(int elem2 = 0; elem2 < nelements; elem2++) {
+  for(int elem3 = 0; elem3 < nelements; elem3++) {
   for(int j1 = 0; j1 <= twojmax; j1++)
     for(int j2 = 0; j2 <= j1; j2++) {
       for(int j = abs(j1 - j2);
@@ -624,12 +624,12 @@ void SNA::copy_bi2bvec()
 
   ncount = 0;
 
-  // loop over all unique element triples (elem1, elem2, elem3)
+  // loop over all element triples (elem1, elem2, elem3)
   
   int itriple = 0;
   for(int elem1 = 0; elem1 < nelements; elem1++)
-  for(int elem2 = elem1; elem2 < nelements; elem2++)
-  for(int elem3 = elem2; elem3 < nelements; elem3++) {
+  for(int elem2 = 0; elem2 < nelements; elem2++)
+  for(int elem3 = 0; elem3 < nelements; elem3++) {
   for(j1 = 0; j1 <= twojmax; j1++)
     if(diagonalstyle == 0) {
       for(j2 = 0; j2 <= j1; j2++)
@@ -740,46 +740,54 @@ void SNA::compute_dbidrj()
   clock_gettime(CLOCK_REALTIME, &starttime);
 #endif
 
-  // loop over all unique element triples (elem1, elem2, elem3)
-  // **********CODE HORROR************
-  // something funny going on here, because elem3 is not used
-  // I think the loop over elem3 should be removed
-  // maybe it's okay.
-
   int idouble;
-  int itriple = 0;
-  for(int elem1 = 0; elem1 < nelements; elem1++)
-  for(int elem2 = elem1; elem2 < nelements; elem2++) {
-  for(int elem3 = elem2; elem3 < nelements; elem3++) {
+  int itriple;
+  int elem3 = elem_duarray;
+
+  // set all the derivatives to zero once
+  
   for(int JJ = 0; JJ < idxj_max; JJ++) {
     const int j1 = idxj[JJ].j1;
     const int j2 = idxj[JJ].j2;
     const int j = idxj[JJ].j;
 
-    dbdr = dbarray[itriple][j1][j2][j];
-    dbdr[0] = 0.0;
-    dbdr[1] = 0.0;
-    dbdr[2] = 0.0;
+    for(int elem1 = 0; elem1 < nelements; elem1++)
+    for(int elem2 = 0; elem2 < nelements; elem2++)
+    for(int elem3 = 0; elem3 < nelements; elem3++) {
 
-    // Sum terms Conj(dudr(j,ma,mb))*z(j1,j2,j,ma,mb)
-    // Only if elem3 matches elem_duarray
+      itriple = (elem1*nelements+elem2)*nelements+elem3;
+
+      dbdr = dbarray[itriple][j1][j2][j];
+      dbdr[0] = 0.0;
+      dbdr[1] = 0.0;
+      dbdr[2] = 0.0;
+    }
+  }
+  
+  // loop over all unique triples of j1, j2, j
+  
+  for(int JJ = 0; JJ < idxj_max; JJ++) {
+    const int j1 = idxj[JJ].j1;
+    const int j2 = idxj[JJ].j2;
+    const int j = idxj[JJ].j;
+
+    for(int elem1 = 0; elem1 < nelements; elem1++)
+    for(int elem2 = 0; elem2 < nelements; elem2++) {
+
+    // sum over Conj(dudr(j,ma,mb))*z(j1,j2,j,ma,mb)
     
-    if (elem3 == elem_duarray) {
-      
+    itriple = (elem1*nelements+elem2)*nelements+elem3;
+    idouble = elem1*nelements+elem2;
+
+    dbdr = dbarray[itriple][j1][j2][j];
+
     for(int k = 0; k < 3; k++)
       sumzdu_r[k] = 0.0;
 
-    // use zarray j1/j2 symmetry (optional)
-
-    if (j1 >= j2) {
-      idouble = elem1*(2*nelements-elem1-1)/2.0+elem2;
-      jjjzarray_r = zarray_r[idouble][j1][j2][j];
-      jjjzarray_i = zarray_i[idouble][j1][j2][j];
-    } else {
-      idouble = elem2*(2*nelements-elem2-1)/2.0+elem1;
-      jjjzarray_r = zarray_r[idouble][j2][j1][j];
-      jjjzarray_i = zarray_i[idouble][j2][j1][j];
-    }
+    // no need to check for j2 <= j1 symmetry of zarray
+    
+    jjjzarray_r = zarray_r[idouble][j1][j2][j];
+    jjjzarray_i = zarray_i[idouble][j1][j2][j];
 
     for(int mb = 0; 2*mb < j; mb++)
       for(int ma = 0; ma <= j; ma++) {
@@ -823,23 +831,22 @@ void SNA::compute_dbidrj()
     for(int k = 0; k < 3; k++)
       dbdr[k] += 2.0*sumzdu_r[k];
 
-    } // end if elem3 == elem_duarray
-    
-    // Sum over Conj(dudr(j1,ma1,mb1))*z(j,j2,j1,ma1,mb1)
+    // sum over Conj(dudr(j1,ma1,mb1))*z(j,j2,j1,ma1,mb1)
 
-    if (elem1 == elem_duarray) {
+    itriple = (elem3*nelements+elem2)*nelements+elem1;
+    idouble = elem3*nelements+elem2;
+
+    dbdr = dbarray[itriple][j][j2][j1];
 
     for(int k = 0; k < 3; k++)
       sumzdu_r[k] = 0.0;
 
-    // use zarray j1/j2 symmetry (optional)
+    //  use zarray j1/j2 symmetry
 
     if (j >= j2) {
-      idouble = elem3*(2*nelements-elem3-1)/2.0+elem2;
       jjjzarray_r = zarray_r[idouble][j][j2][j1];
       jjjzarray_i = zarray_i[idouble][j][j2][j1];
     } else {
-      idouble = elem2*(2*nelements-elem2-1)/2.0+elem3;
       jjjzarray_r = zarray_r[idouble][j2][j][j1];
       jjjzarray_i = zarray_i[idouble][j2][j][j1];
     }
@@ -886,11 +893,12 @@ void SNA::compute_dbidrj()
     for(int k = 0; k < 3; k++)
       dbdr[k] += 2.0*sumzdu_r[k];
 
-    } // end if elem1 == elem_duarray
-    
-    // Sum over Conj(dudr(j2,ma2,mb2))*z(j1,j,j2,ma2,mb2)
+    // sum over Conj(dudr(j2,ma2,mb2))*z(j1,j,j2,ma2,mb2)
 
-    if (elem2 == elem_duarray) {
+    itriple = (elem1*nelements+elem3)*nelements+elem2;
+    idouble = elem1*nelements+elem3;
+
+    dbdr = dbarray[itriple][j][j2][j1];
 
     for(int k = 0; k < 3; k++)
       sumzdu_r[k] = 0.0;
@@ -898,11 +906,9 @@ void SNA::compute_dbidrj()
     // use zarray j1/j2 symmetry (optional)
 
     if (j1 >= j) {
-      idouble = elem1*(2*nelements-elem1-1)/2.0+elem3;
       jjjzarray_r = zarray_r[idouble][j1][j][j2];
       jjjzarray_i = zarray_i[idouble][j1][j][j2];
     } else {
-      idouble = elem3*(2*nelements-elem3-1)/2.0+elem1;
       jjjzarray_r = zarray_r[idouble][j][j1][j2];
       jjjzarray_i = zarray_i[idouble][j][j1][j2];
     }
@@ -949,12 +955,8 @@ void SNA::compute_dbidrj()
     for(int k = 0; k < 3; k++)
       dbdr[k] += 2.0*sumzdu_r[k];
 
-    } // end if elem2 == elem_duarray
-    
+    } // end loop over elem1,elem2
   } //end loop over j1 j2 j
-  itriple++;
-  } // end loop over elem3
-  } // end loop over elem1,elem2
 
 #ifdef TIMING_INFO
   clock_gettime(CLOCK_REALTIME, &endtime);
@@ -974,12 +976,12 @@ void SNA::copy_dbi2dbvec()
 
   ncount = 0;
 
-  // loop over all unique element triples (elem1, elem2, elem3)
+  // loop over all element triples (elem1, elem2, elem3)
   
   int itriple = 0;
   for(int elem1 = 0; elem1 < nelements; elem1++)
-  for(int elem2 = elem1; elem2 < nelements; elem2++)
-  for(int elem3 = elem2; elem3 < nelements; elem3++) {
+  for(int elem2 = 0; elem2 < nelements; elem2++)
+  for(int elem3 = 0; elem3 < nelements; elem3++) {
   for(j1 = 0; j1 <= twojmax; j1++) {
     if(diagonalstyle == 0) {
       for(j2 = 0; j2 <= j1; j2++)
@@ -1884,8 +1886,8 @@ void SNA::compute_ncoeff()
           if (j >= j1) ncount++;
     }
 
-  ndoubles = (nelements+1)*nelements/2.0;
-  ntriples = (nelements+2)*(nelements+1)*nelements/6.0;
+  ndoubles = nelements*nelements;
+  ntriples = nelements*nelements*nelements;
   ncoeff = ncount*ntriples;
 }
 

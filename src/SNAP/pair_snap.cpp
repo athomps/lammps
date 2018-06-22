@@ -35,10 +35,6 @@ using namespace LAMMPS_NS;
 #define MAXLINE 1024
 #define MAXWORD 3
 
-// Outstanding issues with quadratic term
-// 1. there seems to a problem with compute_optimized energy calc
-// it does not match compute_regular, even when quadratic coeffs = 0
-
 /* ---------------------------------------------------------------------- */
 
 PairSNAP::PairSNAP(LAMMPS *lmp) : Pair(lmp), elements(NULL), radelem(NULL),
@@ -228,7 +224,7 @@ void PairSNAP::compute_regular(int eflag, int vflag)
         snaptr->inside[ninside] = j;
         snaptr->wj[ninside] = wjelem[jelem];
         snaptr->rcutij[ninside] = (radi + radelem[jelem])*rcutfac;
-        snaptr->element[ninside] = jelem; // element index for multi-element snap
+        snaptr->element[ninside] = jelem; // element index for alloy snap
         ninside++;
       }
     }
@@ -561,7 +557,7 @@ void PairSNAP::compute_optimized(int eflag, int vflag)
           // inside = indices of neighbors of I within cutoff
           // wj = weights of neighbors of I within cutoff
           // rcutij = cutoffs of neighbors of I within cutoff
-          // element = element index for multi-element snap
+          // element = element index for alloy snap
           // note Rij sign convention => dU/dRij = dU/dRj = -dU/dRi
 
           ninside = 0;
@@ -1156,7 +1152,7 @@ void PairSNAP::build_per_atom_arrays()
     delete [] i_zarray_i;
     i_zarray_r = new double******[count];
     i_zarray_i = new double******[count];
-    int ndoubles = (nelements+1)*nelements/2.0;
+    int ndoubles = nelements*nelements;
     for (int i = 0; i < count; i++) {
       memory->create(i_zarray_r[i],ndoubles,jdim,jdim,jdim,jdim,jdim,
                      "PairSNAP::i_zarray_r");
@@ -1203,7 +1199,7 @@ void PairSNAP::build_per_atom_arrays()
           i_inside[count][ninside] = j;
           i_wj[count][ninside] = wjelem[jelem];
           i_rcutij[count][ninside] = (radi + radelem[jelem])*rcutfac;
-          i_element[count][ninside] = jelem; // element index for multi-element snap
+          i_element[count][ninside] = jelem; // element index for alloy snap
 
           // update index list with inside index
           i_pairs[i_numpairs][2] = ninside++;
@@ -1248,7 +1244,7 @@ void PairSNAP::build_per_atom_arrays()
         i_inside[count][ninside] = j;
         i_wj[count][ninside] = wjelem[jelem];
         i_rcutij[count][ninside] = (radi + radelem[jelem])*rcutfac;
-        i_element[count][ninside] = jelem; // element index for multi-element snap
+        i_element[count][ninside] = jelem; // element index for alloy snap
         // update index list with inside index
         i_pairs[i_numpairs][2] = ninside++;
       }
