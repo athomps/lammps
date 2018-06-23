@@ -263,6 +263,7 @@ void PairSNAP::compute_regular(int eflag, int vflag)
         fij[0] += bgb*snaptr->dbvec[k-1][0];
         fij[1] += bgb*snaptr->dbvec[k-1][1];
         fij[2] += bgb*snaptr->dbvec[k-1][2];
+        printf("dbvec %d %g \n",k,bgb*snaptr->dbvec[k-1][0]);
       }
 
       // quadratic contributions

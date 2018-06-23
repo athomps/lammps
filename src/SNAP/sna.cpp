@@ -571,6 +571,9 @@ void SNA::compute_bi()
   for(int elem1 = 0; elem1 < nelements; elem1++)
   for(int elem2 = 0; elem2 < nelements; elem2++) {
   for(int elem3 = 0; elem3 < nelements; elem3++) {
+    // ***CODE HORROR***
+    // this is not right, it is calculating j < j1 terms
+    // it should be using the list idxj
   for(int j1 = 0; j1 <= twojmax; j1++)
     for(int j2 = 0; j2 <= j1; j2++) {
       for(int j = abs(j1 - j2);
@@ -600,6 +603,8 @@ void SNA::compute_bi()
         barray[itriple][j1][j2][j] *= 2.0;
         if (bzero_flag)
           barray[itriple][j1][j2][j] -= bzero[j];
+        // multiply by j+1 to compare with old version
+        printf("barray %d %d %d %g \n",j1,j2,j,barray[itriple][j1][j2][j]*(j+1));
       }
     }
   itriple++;
@@ -836,7 +841,9 @@ void SNA::compute_dbidrj()
     itriple = (elem3*nelements+elem2)*nelements+elem1;
     idouble = elem3*nelements+elem2;
 
-    dbdr = dbarray[itriple][j][j2][j1];
+    // new itriple, idouble, but same j1,j2,j
+
+    dbdr = dbarray[itriple][j1][j2][j];
 
     for(int k = 0; k < 3; k++)
       sumzdu_r[k] = 0.0;
@@ -898,7 +905,9 @@ void SNA::compute_dbidrj()
     itriple = (elem1*nelements+elem3)*nelements+elem2;
     idouble = elem1*nelements+elem3;
 
-    dbdr = dbarray[itriple][j][j2][j1];
+    // new itriple, idouble, but same j1,j2,j
+
+    dbdr = dbarray[itriple][j1][j2][j];
 
     for(int k = 0; k < 3; k++)
       sumzdu_r[k] = 0.0;
@@ -1063,6 +1072,7 @@ void SNA::add_uarraytot(double r, double wj, double rcut, int ielem)
   for (int j = 0; j <= twojmax; j++)
     for (int ma = 0; ma <= j; ma++)
       for (int mb = 0; mb <= j; mb++) {
+        printf("uarray %g %g \n",uarray_r[j][ma][mb],uarray_i[j][ma][mb]);
         uarraytot_r[ielem][j][ma][mb] +=
           sfac * uarray_r[j][ma][mb];
         uarraytot_i[ielem][j][ma][mb] +=
@@ -1411,6 +1421,7 @@ void SNA::compute_duarray(double x, double y, double z,
                                   sfac * duarray_r[j][ma][mb][2];
         duarray_i[j][ma][mb][2] = dsfac * uarray_i[j][ma][mb] * uz +
                                   sfac * duarray_i[j][ma][mb][2];
+        printf("duarray %g \n",duarray_r[j][ma][mb][0]);
       }
 }
 
