@@ -316,7 +316,7 @@ void SNA::grow_rij(int newnmax)
    compute Ui by summing over neighbors j
 ------------------------------------------------------------------------- */
 
-void SNA::compute_ui(int jnum)
+void SNA::compute_ui(int jnum, int ielem)
 {
   double rsq, r, x, y, z, z0, theta0;
 
@@ -327,7 +327,9 @@ void SNA::compute_ui(int jnum)
   //   utot(j,ma,mb) += u(r0;j,ma,mb) for all j,ma,mb
 
   zero_uarraytot();
-  addself_uarraytot(wself);
+  //  addself_uarraytot(wself);
+  //this is for test purposes only, not physical
+  addself_uarraytot_once(wself, ielem);
 
 #ifdef TIMING_INFO
   clock_gettime(CLOCK_REALTIME, &starttime);
@@ -603,8 +605,6 @@ void SNA::compute_bi()
         barray[itriple][j1][j2][j] *= 2.0;
         if (bzero_flag)
           barray[itriple][j1][j2][j] -= bzero[j];
-        // multiply by j+1 to compare with old version
-        printf("barray %d %d %d %g \n",j1,j2,j,barray[itriple][j1][j2][j]*(j+1));
       }
     }
   itriple++;
@@ -779,10 +779,13 @@ void SNA::compute_dbidrj()
     for(int elem1 = 0; elem1 < nelements; elem1++)
     for(int elem2 = 0; elem2 < nelements; elem2++) {
 
+    // zarray always for (elem1, elem2)
+  
+    idouble = elem1*nelements+elem2;
+
     // sum over Conj(dudr(j,ma,mb))*z(j1,j2,j,ma,mb)
     
     itriple = (elem1*nelements+elem2)*nelements+elem3;
-    idouble = elem1*nelements+elem2;
 
     dbdr = dbarray[itriple][j1][j2][j];
 
@@ -839,10 +842,6 @@ void SNA::compute_dbidrj()
     // sum over Conj(dudr(j1,ma1,mb1))*z(j,j2,j1,ma1,mb1)
 
     itriple = (elem3*nelements+elem2)*nelements+elem1;
-    idouble = elem3*nelements+elem2;
-
-    // new itriple, idouble, but same j1,j2,j
-
     dbdr = dbarray[itriple][j1][j2][j];
 
     for(int k = 0; k < 3; k++)
@@ -854,6 +853,7 @@ void SNA::compute_dbidrj()
       jjjzarray_r = zarray_r[idouble][j][j2][j1];
       jjjzarray_i = zarray_i[idouble][j][j2][j1];
     } else {
+      printf("sna.cpp:Aaah1! This should never happen\n");
       jjjzarray_r = zarray_r[idouble][j2][j][j1];
       jjjzarray_i = zarray_i[idouble][j2][j][j1];
     }
@@ -903,10 +903,6 @@ void SNA::compute_dbidrj()
     // sum over Conj(dudr(j2,ma2,mb2))*z(j1,j,j2,ma2,mb2)
 
     itriple = (elem1*nelements+elem3)*nelements+elem2;
-    idouble = elem1*nelements+elem3;
-
-    // new itriple, idouble, but same j1,j2,j
-
     dbdr = dbarray[itriple][j1][j2][j];
 
     for(int k = 0; k < 3; k++)
@@ -914,7 +910,8 @@ void SNA::compute_dbidrj()
 
     // use zarray j1/j2 symmetry (optional)
 
-    if (j1 >= j) {
+    if (j1 > j) {
+      printf("sna.cpp:Aaah2! This should never happen\n");
       jjjzarray_r = zarray_r[idouble][j1][j][j2];
       jjjzarray_i = zarray_i[idouble][j1][j][j2];
     } else {
@@ -1058,6 +1055,19 @@ void SNA::addself_uarraytot(double wself_in)
 }
 
 /* ----------------------------------------------------------------------
+   this is just for test purposes, adding self only to first element
+------------------------------------------------------------------------- */
+
+void SNA::addself_uarraytot_once(double wself_in, int ielem)
+{
+  for (int j = 0; j <= twojmax; j++)
+    for (int ma = 0; ma <= j; ma++) {
+      uarraytot_r[ielem][j][ma][ma] = wself_in;
+      uarraytot_i[ielem][j][ma][ma] = 0.0;
+    }
+}
+
+/* ----------------------------------------------------------------------
    add Wigner U-functions for one neighbor to the total
 ------------------------------------------------------------------------- */
 
@@ -1072,7 +1082,6 @@ void SNA::add_uarraytot(double r, double wj, double rcut, int ielem)
   for (int j = 0; j <= twojmax; j++)
     for (int ma = 0; ma <= j; ma++)
       for (int mb = 0; mb <= j; mb++) {
-        printf("uarray %g %g \n",uarray_r[j][ma][mb],uarray_i[j][ma][mb]);
         uarraytot_r[ielem][j][ma][mb] +=
           sfac * uarray_r[j][ma][mb];
         uarraytot_i[ielem][j][ma][mb] +=
@@ -1421,7 +1430,6 @@ void SNA::compute_duarray(double x, double y, double z,
                                   sfac * duarray_r[j][ma][mb][2];
         duarray_i[j][ma][mb][2] = dsfac * uarray_i[j][ma][mb] * uz +
                                   sfac * duarray_i[j][ma][mb][2];
-        printf("duarray %g \n",duarray_r[j][ma][mb][0]);
       }
 }
 

@@ -259,6 +259,7 @@ void ComputeSNADAtom::compute_peratom()
       const double ytmp = x[i][1];
       const double ztmp = x[i][2];
       const int itype = type[i];
+      const int ielem = map[itype];
       const double radi = radelem[itype];
       const int* const jlist = firstneigh[i];
       const int jnum = numneigh[i];
@@ -297,7 +298,7 @@ void ComputeSNADAtom::compute_peratom()
         }
       }
 
-      snaptr[tid]->compute_ui(ninside);
+      snaptr[tid]->compute_ui(ninside, ielem);
       snaptr[tid]->compute_zi();
       if (quadraticflag) {
         snaptr[tid]->compute_bi();

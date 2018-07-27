@@ -44,7 +44,8 @@ protected:
   int nmax;
   int nthreads;
   virtual void allocate();
-  void read_files(char *, char *);
+  void read_coeff_file(char *);
+  void read_param_file(char *);
   inline int equal(double* x,double* y);
   inline double dist2(double* x,double* y);
   double extra_cutoff();

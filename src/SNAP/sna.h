@@ -44,7 +44,7 @@ public:
 
   // functions for bispectrum coefficients
 
-  void compute_ui(int);
+  void compute_ui(int, int);
   void compute_ui_omp(int, int);
   void compute_zi();
   void compute_zi_omp(int);
@@ -117,6 +117,7 @@ private:
   void print_clebsch_gordan(FILE*);
   void zero_uarraytot();
   void addself_uarraytot(double);
+  void addself_uarraytot_once(double, int);
   void add_uarraytot(double, double, double, int);
   void add_uarraytot_omp(double, double, double, int);
   void compute_uarray(double, double, double,

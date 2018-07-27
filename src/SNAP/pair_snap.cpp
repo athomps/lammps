@@ -231,7 +231,7 @@ void PairSNAP::compute_regular(int eflag, int vflag)
 
     // compute Ui, Zi, and Bi for atom I
 
-    snaptr->compute_ui(ninside);
+    snaptr->compute_ui(ninside,ielem);
     snaptr->compute_zi();
     if (quadraticflag) {
       snaptr->compute_bi();
@@ -263,7 +263,6 @@ void PairSNAP::compute_regular(int eflag, int vflag)
         fij[0] += bgb*snaptr->dbvec[k-1][0];
         fij[1] += bgb*snaptr->dbvec[k-1][1];
         fij[2] += bgb*snaptr->dbvec[k-1][2];
-        printf("dbvec %d %g \n",k,bgb*snaptr->dbvec[k-1][0]);
       }
 
       // quadratic contributions
@@ -590,7 +589,7 @@ void PairSNAP::compute_optimized(int eflag, int vflag)
 
           // compute Ui and Zi for atom I
 
-          sna[tid]->compute_ui(ninside); //unitialised
+          sna[tid]->compute_ui(ninside, ielem); //unitialised
           sna[tid]->compute_zi();
         }
       }
@@ -1438,7 +1437,6 @@ void PairSNAP::coeff(int narg, char **arg)
 
   nelements = narg - 4 - atom->ntypes;
   if (nelements < 1) error->all(FLERR,"Incorrect args for pair coefficients");
-  printf("nelements = %d\n",nelements);
   char* type1 = arg[0];
   char* type2 = arg[1];
   char* coefffilename = arg[2];
@@ -1462,7 +1460,8 @@ void PairSNAP::coeff(int narg, char **arg)
 
   // read snapcoeff and snapparam files
 
-  read_files(coefffilename,paramfilename);
+  read_coeff_file(coefffilename);
+  read_param_file(paramfilename);
 
   if (!quadraticflag)
     ncoeff = ncoeffall - 1;
@@ -1486,7 +1485,6 @@ void PairSNAP::coeff(int narg, char **arg)
   // map[i] = which element the Ith atom type is, -1 if not mapped
   // map[0] is not used
 
-  printf("ntypes %d\n",atom->ntypes);
   for (int i = 1; i <= atom->ntypes; i++) {
     char* elemname = elemtypes[i-1];
     int jelem;
@@ -1498,7 +1496,6 @@ void PairSNAP::coeff(int narg, char **arg)
       map[i] = jelem;
     else if (strcmp(elemname,"NULL") == 0) map[i] = -1;
     else error->all(FLERR,"Incorrect args for pair coefficients");
-    printf("elem %d %s %d %d\n",i,elemname,jelem,map[i]);
   }
 
   // clear setflag since coeff() called once with I,J = * *
@@ -1591,7 +1588,7 @@ double PairSNAP::init_one(int i, int j)
 
 /* ---------------------------------------------------------------------- */
 
-void PairSNAP::read_files(char *coefffilename, char *paramfilename)
+void PairSNAP::read_coeff_file(char *coefffilename)
 {
 
   // open SNAP coefficient file on proc 0
@@ -1608,7 +1605,6 @@ void PairSNAP::read_files(char *coefffilename, char *paramfilename)
 
   char line[MAXLINE],*ptr;
   int eof = 0;
-
   int n;
   int nwords = 0;
   while (nwords == 0) {
@@ -1630,7 +1626,7 @@ void PairSNAP::read_files(char *coefffilename, char *paramfilename)
     nwords = atom->count_words(line);
   }
   if (nwords != 2)
-    error->all(FLERR,"Incorrect format in SNAP coefficient file");
+    error->all(FLERR,"Incorrect SNAP coefficient file");
 
   // words = ptrs to all words in line
   // strip single and double quotes from words
@@ -1641,8 +1637,8 @@ void PairSNAP::read_files(char *coefffilename, char *paramfilename)
   iword = 1;
   words[iword] = strtok(NULL,"' \t\n\r\f");
 
-  int nelemfile = atoi(words[0]);
-  ncoeffall = atoi(words[1]);
+  int nelemfile = force->inumeric(FLERR,words[0]);
+  ncoeffall = force->inumeric(FLERR,words[1]);
 
   // Set up element lists
 
@@ -1658,22 +1654,25 @@ void PairSNAP::read_files(char *coefffilename, char *paramfilename)
 
   for (int ielemfile = 0; ielemfile < nelemfile; ielemfile++) {
 
-    if (comm->me == 0) {
-      ptr = fgets(line,MAXLINE,fpcoeff);
-      if (ptr == NULL) {
-        eof = 1;
-        fclose(fpcoeff);
-      } else n = strlen(line) + 1;
+    int nwords = 0;
+    while (nwords == 0) {
+      if (comm->me == 0) {
+        ptr = fgets(line,MAXLINE,fpcoeff);
+        if (ptr == NULL) {
+          eof = 1;
+          fclose(fpcoeff);
+        } else n = strlen(line) + 1;
+      }
+      MPI_Bcast(&eof,1,MPI_INT,0,world);
+      if (eof)
+        error->all(FLERR,"Incorrect SNAP coefficient file");
+      MPI_Bcast(&n,1,MPI_INT,0,world);
+      MPI_Bcast(line,n,MPI_CHAR,0,world);
+      
+      nwords = atom->count_words(line);
     }
-    MPI_Bcast(&eof,1,MPI_INT,0,world);
-    if (eof)
-      error->all(FLERR,"Incorrect format in SNAP coefficient file");
-    MPI_Bcast(&n,1,MPI_INT,0,world);
-    MPI_Bcast(line,n,MPI_CHAR,0,world);
-
-    nwords = atom->count_words(line);
     if (nwords != 3)
-      error->all(FLERR,"Incorrect format in SNAP coefficient file");
+      error->all(FLERR,"Incorrect SNAP coefficient file");
 
     iword = 0;
     words[iword] = strtok(line,"' \t\n\r\f");
@@ -1683,8 +1682,8 @@ void PairSNAP::read_files(char *coefffilename, char *paramfilename)
     words[iword] = strtok(NULL,"' \t\n\r\f");
 
     char* elemtmp = words[0];
-    double radtmp = atof(words[1]);
-    double wjtmp = atof(words[2]);
+    double radtmp = force->numeric(FLERR,words[1]);
+    double wjtmp = force->numeric(FLERR,words[2]);
 
     // skip if element name isn't in element list
 
@@ -1730,21 +1729,35 @@ void PairSNAP::read_files(char *coefffilename, char *paramfilename)
 
       MPI_Bcast(&eof,1,MPI_INT,0,world);
       if (eof)
-        error->all(FLERR,"Incorrect format in SNAP coefficient file");
+        error->all(FLERR,"Incorrect SNAP coefficient file");
       MPI_Bcast(&n,1,MPI_INT,0,world);
       MPI_Bcast(line,n,MPI_CHAR,0,world);
 
       nwords = atom->count_words(line);
       if (nwords != 1)
-        error->all(FLERR,"Incorrect format in SNAP coefficient file");
+        error->all(FLERR,"Incorrect SNAP coefficient file");
 
       iword = 0;
       words[iword] = strtok(line,"' \t\n\r\f");
 
-      coeffelem[ielem][icoeff] = atof(words[0]);
+      coeffelem[ielem][icoeff] = force->numeric(FLERR,words[0]);
 
     }
   }
+
+  // check that all elements were found
+
+  for (int ielem = 0; ielem < nelements; ielem++)
+    if (found[ielem] == 0)
+      error->all(FLERR,"Incorrect SNAP coefficient file");
+
+  delete[] found;
+}
+
+/* ---------------------------------------------------------------------- */
+
+void PairSNAP::read_param_file(char *paramfilename)
+{
 
   // set flags for required keywords
 
@@ -1773,7 +1786,11 @@ void PairSNAP::read_files(char *coefffilename, char *paramfilename)
     }
   }
 
-  eof = 0;
+  char line[MAXLINE],*ptr;
+  int eof = 0;
+  int n;
+  int nwords = 0;
+
   while (1) {
     if (comm->me == 0) {
       ptr = fgets(line,MAXLINE,fpparam);
@@ -1794,7 +1811,7 @@ void PairSNAP::read_files(char *coefffilename, char *paramfilename)
     if (nwords == 0) continue;
 
     if (nwords != 2)
-      error->all(FLERR,"Incorrect format in SNAP parameter file");
+      error->all(FLERR,"Incorrect SNAP parameter file");
 
     // words = ptrs to all words in line
     // strip single and double quotes from words
@@ -1834,7 +1851,6 @@ void PairSNAP::read_files(char *coefffilename, char *paramfilename)
   if (rcutfacflag == 0 || twojmaxflag == 0)
     error->all(FLERR,"Incorrect SNAP parameter file");
 
-  delete[] found;
 }
 
 /* ----------------------------------------------------------------------
