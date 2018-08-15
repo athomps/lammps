@@ -327,9 +327,9 @@ void SNA::compute_ui(int jnum, int ielem)
   //   utot(j,ma,mb) += u(r0;j,ma,mb) for all j,ma,mb
 
   zero_uarraytot();
-  //  addself_uarraytot(wself);
+  addself_uarraytot(wself);
   //this is for test purposes only, not physical
-  addself_uarraytot_once(wself, ielem);
+  // addself_uarraytot_once(wself, ielem);
 
 #ifdef TIMING_INFO
   clock_gettime(CLOCK_REALTIME, &starttime);
