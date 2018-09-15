@@ -32,7 +32,7 @@ class SNA : protected Pointers {
 
 public:
   SNA(LAMMPS*, double, int, int, int, double, int, int,
-      int, int);
+      int, int, int);
 
   SNA(LAMMPS* lmp) : Pointers(lmp) {};
   ~SNA();
@@ -48,7 +48,7 @@ public:
   void compute_ui_omp(int, int);
   void compute_zi();
   void compute_zi_omp(int);
-  void compute_bi();
+  void compute_bi(int);
   void copy_bi2bvec();
 
   // functions for derivatives
@@ -115,9 +115,7 @@ private:
   void jtostr(char*, int);
   void mtostr(char*, int, int);
   void print_clebsch_gordan(FILE*);
-  void zero_uarraytot();
-  void addself_uarraytot(double);
-  void addself_uarraytot_once(double, int);
+  void initialize_uarraytot(int);
   void add_uarraytot(double, double, double, int);
   void add_uarraytot_omp(double, double, double, int);
   void compute_uarray(double, double, double,
@@ -147,6 +145,7 @@ private:
   double *bzero;  // array of B values for isolated atoms
 
   int alloy_flag; // 1 for multi-element bispectrum components
+  int wselfall_flag; // 1 for adding wself to all element labelings
   int nelements;  // number of elements
   int ntriples;   // number of multi-element triplets
   int ndoubles;   // number of multi-element pairs

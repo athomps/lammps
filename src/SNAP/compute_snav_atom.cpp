@@ -48,7 +48,8 @@ ComputeSNAVAtom::ComputeSNAVAtom(LAMMPS *lmp, int narg, char **arg) :
   switchflag = 1;
   bzeroflag = 1;
   quadraticflag = 0;
-  alloyflag = 0;
+  alloyflag = 1;
+  wselfallflag = 1;
   
   // process required arguments
   
@@ -119,6 +120,11 @@ ComputeSNAVAtom::ComputeSNAVAtom(LAMMPS *lmp, int narg, char **arg) :
         map[i+1] = jelem;
       }
       iarg += 2+ntypes;
+    } else if (strcmp(arg[iarg],"wselfall") == 0) {
+      if (iarg+2 > narg)
+        error->all(FLERR,"Illegal compute snav/atom command");
+      wselfallflag = atoi(arg[iarg+1]);
+      iarg += 2;
     } else error->all(FLERR,"Illegal compute snav/atom command");
   }
 
@@ -132,7 +138,7 @@ ComputeSNAVAtom::ComputeSNAVAtom(LAMMPS *lmp, int narg, char **arg) :
     // always unset use_shared_arrays since it does not work with computes
     snaptr[tid] = new SNA(lmp,rfac0,twojmax,diagonalstyle,
                           0 /*use_shared_arrays*/, rmin0,switchflag,bzeroflag,
-                          alloyflag,nelements);
+                          alloyflag,wselfallflag,nelements);
   }
 
   ncoeff = snaptr[0]->ncoeff;
@@ -296,7 +302,7 @@ void ComputeSNAVAtom::compute_peratom()
       snaptr[tid]->compute_ui(ninside, ielem);
       snaptr[tid]->compute_zi();
       if (quadraticflag) {
-        snaptr[tid]->compute_bi();
+        snaptr[tid]->compute_bi(ielem);
         snaptr[tid]->copy_bi2bvec();
       }
 

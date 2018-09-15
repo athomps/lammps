@@ -100,7 +100,7 @@ protected:
   double **coeffelem;           // element bispectrum coefficients
   int *map;                     // mapping from atom types to elements
   int twojmax, diagonalstyle, switchflag, bzeroflag, quadraticflag;
-  int alloyflag;
+  int alloyflag, wselfallflag;
   double rcutfac, rfac0, rmin0, wj1, wj2;
   int rcutfacflag, twojmaxflag; // flags for required parameters
 };

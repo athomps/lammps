@@ -234,7 +234,7 @@ void PairSNAP::compute_regular(int eflag, int vflag)
     snaptr->compute_ui(ninside,ielem);
     snaptr->compute_zi();
     if (quadraticflag) {
-      snaptr->compute_bi();
+      snaptr->compute_bi(ielem);
       snaptr->copy_bi2bvec();
     }
 
@@ -313,7 +313,7 @@ void PairSNAP::compute_regular(int eflag, int vflag)
 
       evdwl = coeffi[0];
       if (!quadraticflag) {
-        snaptr->compute_bi();
+        snaptr->compute_bi(ielem);
         snaptr->copy_bi2bvec();
       }
 
@@ -594,7 +594,7 @@ void PairSNAP::compute_optimized(int eflag, int vflag)
         }
       }
       if (quadraticflag) {
-        sna[tid]->compute_bi();
+        sna[tid]->compute_bi(ielem);
         sna[tid]->copy_bi2bvec();
       }
 
@@ -681,7 +681,7 @@ void PairSNAP::compute_optimized(int eflag, int vflag)
         evdwl = coeffi[0];
 
         if (!quadraticflag) {
-          sna[tid]->compute_bi();
+          sna[tid]->compute_bi(ielem);
           sna[tid]->copy_bi2bvec();
         }
 
@@ -1268,7 +1268,6 @@ void PairSNAP::build_per_atom_arrays()
   for (int ii=0; ii < count; ii++) {
     int tid = omp_get_thread_num();
     set_sna_to_shared(tid,ii);
-    //sna[tid]->compute_ui(i_ninside[ii]);
 #ifdef TIMING_INFO
     clock_gettime(CLOCK_REALTIME,&starttime);
 #endif
@@ -1531,7 +1530,7 @@ void PairSNAP::coeff(int narg, char **arg)
     sna[tid] = new SNA(lmp,rfac0,twojmax,
                        diagonalstyle,use_shared_arrays,
                        rmin0,switchflag,bzeroflag,
-                       alloyflag,nelements);
+                       alloyflag,wselfallflag,nelements);
     if (!use_shared_arrays)
       sna[tid]->grow_rij(nmax);
   }
@@ -1773,6 +1772,7 @@ void PairSNAP::read_param_file(char *paramfilename)
   bzeroflag = 1;
   quadraticflag = 0;
   alloyflag = 1;
+  wselfallflag = 1;
 
   // open SNAP parameter file on proc 0
 
@@ -1844,6 +1844,8 @@ void PairSNAP::read_param_file(char *paramfilename)
       quadraticflag = atoi(keyval);
     else if (strcmp(keywd,"alloyflag") == 0)
       alloyflag = atoi(keyval);
+    else if (strcmp(keywd,"wselfallflag") == 0)
+      wselfallflag = atoi(keyval);
     else
       error->all(FLERR,"Incorrect SNAP parameter file");
   }

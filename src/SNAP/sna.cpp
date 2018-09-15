@@ -115,8 +115,8 @@ using namespace MathConst;
 
 SNA::SNA(LAMMPS* lmp, double rfac0_in,
          int twojmax_in, int diagonalstyle_in, int use_shared_arrays_in,
-         double rmin0_in, int switch_flag_in, int bzero_flag_in,
-         int alloy_flag_in, int nelements_in) : Pointers(lmp)
+         double rmin0_in, int switch_flag_in, int bzero_flag_in, 
+         int alloy_flag_in, int wselfall_flag_in, int nelements_in) : Pointers(lmp)
 {
   wself = 1.0;
 
@@ -126,6 +126,7 @@ SNA::SNA(LAMMPS* lmp, double rfac0_in,
   switch_flag = switch_flag_in;
   bzero_flag = bzero_flag_in;
   alloy_flag = alloy_flag_in;
+  wselfall_flag = wselfall_flag_in;
   nelements = nelements_in;
 
   if (!alloy_flag)
@@ -320,16 +321,11 @@ void SNA::compute_ui(int jnum, int ielem)
 {
   double rsq, r, x, y, z, z0, theta0;
 
-  // utot(j,ma,mb) = 0 for all j,ma,ma
-  // utot(j,ma,ma) = 1 for all j,ma
+  initialize_uarraytot(ielem);
+
   // for j in neighbors of i:
   //   compute r0 = (x,y,z,z0)
   //   utot(j,ma,mb) += u(r0;j,ma,mb) for all j,ma,mb
-
-  zero_uarraytot();
-  addself_uarraytot(wself);
-  //this is for test purposes only, not physical
-  // addself_uarraytot_once(wself, ielem);
 
 #ifdef TIMING_INFO
   clock_gettime(CLOCK_REALTIME, &starttime);
@@ -362,14 +358,13 @@ void SNA::compute_ui_omp(int jnum, int sub_threads)
 {
   double rsq, r, x, y, z, z0, theta0;
 
-  // utot(j,ma,mb) = 0 for all j,ma,ma
-  // utot(j,ma,ma) = 1 for all j,ma
+  // this is wrong for nelements > 1, but I don't know how to fix it easily
+  int ielem = 0;
+  initialize_uarraytot(ielem);
+
   // for j in neighbors of i:
   //   compute r0 = (x,y,z,z0)
   //   utot(j,ma,mb) += u(r0;j,ma,mb) for all j,ma,mb
-
-  zero_uarraytot();
-  addself_uarraytot(wself);
 
   for(int j = 0; j < jnum; j++) {
     x = rij[j][0];
@@ -551,7 +546,7 @@ void SNA::compute_zi_omp(int sub_threads)
    compute Bi by summing conj(Ui)*Zi
 ------------------------------------------------------------------------- */
 
-void SNA::compute_bi()
+void SNA::compute_bi(int ielem)
 {
   // for j1 = 0,...,twojmax
   //   for j2 = 0,twojmax
@@ -573,44 +568,75 @@ void SNA::compute_bi()
   for(int elem1 = 0; elem1 < nelements; elem1++)
   for(int elem2 = 0; elem2 < nelements; elem2++) {
   for(int elem3 = 0; elem3 < nelements; elem3++) {
-    // ***CODE HORROR***
-    // this is not right, it is calculating j < j1 terms
-    // it should be using the list idxj
-  for(int j1 = 0; j1 <= twojmax; j1++)
-    for(int j2 = 0; j2 <= j1; j2++) {
-      for(int j = abs(j1 - j2);
-          j <= MIN(twojmax, j1 + j2); j += 2) {
-        barray[itriple][j1][j2][j] = 0.0;
+//     // ***CODE HORROR***
+//     // this is not right, it is calculating j < j1 terms
+//     // it should be using the list idxj
+//   for(int j1 = 0; j1 <= twojmax; j1++)
+//     for(int j2 = 0; j2 <= j1; j2++) {
+//       for(int j = abs(j1 - j2);
 
-        for(int mb = 0; 2*mb < j; mb++)
-          for(int ma = 0; ma <= j; ma++)
-            barray[itriple][j1][j2][j] +=
-              uarraytot_r[elem3][j][ma][mb] * zarray_r[idouble][j1][j2][j][ma][mb] +
-              uarraytot_i[elem3][j][ma][mb] * zarray_i[idouble][j1][j2][j][ma][mb];
+    for(int JJ = 0; JJ < idxj_max; JJ++) {
+      const int j1 = idxj[JJ].j1;
+      const int j2 = idxj[JJ].j2;
+      const int j = idxj[JJ].j;
 
-        // For j even, special treatment for middle column
+      barray[itriple][j1][j2][j] = 0.0;
 
-        if (j%2 == 0) {
-          int mb = j/2;
-          for(int ma = 0; ma < mb; ma++)
-            barray[itriple][j1][j2][j] +=
-              uarraytot_r[elem3][j][ma][mb] * zarray_r[idouble][j1][j2][j][ma][mb] +
-              uarraytot_i[elem3][j][ma][mb] * zarray_i[idouble][j1][j2][j][ma][mb];
-          int ma = mb;
+      for(int mb = 0; 2*mb < j; mb++)
+        for(int ma = 0; ma <= j; ma++)
           barray[itriple][j1][j2][j] +=
-            (uarraytot_r[elem3][j][ma][mb] * zarray_r[idouble][j1][j2][j][ma][mb] +
-             uarraytot_i[elem3][j][ma][mb] * zarray_i[idouble][j1][j2][j][ma][mb])*0.5;
-        }
+            uarraytot_r[elem3][j][ma][mb] * zarray_r[idouble][j1][j2][j][ma][mb] +
+            uarraytot_i[elem3][j][ma][mb] * zarray_i[idouble][j1][j2][j][ma][mb];
 
-        barray[itriple][j1][j2][j] *= 2.0;
-        if (bzero_flag)
-          barray[itriple][j1][j2][j] -= bzero[j];
+      // For j even, special treatment for middle column
+
+      if (j%2 == 0) {
+        int mb = j/2;
+        for(int ma = 0; ma < mb; ma++)
+          barray[itriple][j1][j2][j] +=
+            uarraytot_r[elem3][j][ma][mb] * zarray_r[idouble][j1][j2][j][ma][mb] +
+            uarraytot_i[elem3][j][ma][mb] * zarray_i[idouble][j1][j2][j][ma][mb];
+        int ma = mb;
+        barray[itriple][j1][j2][j] +=
+          (uarraytot_r[elem3][j][ma][mb] * zarray_r[idouble][j1][j2][j][ma][mb] +
+           uarraytot_i[elem3][j][ma][mb] * zarray_i[idouble][j1][j2][j][ma][mb])*0.5;
       }
-    }
-  itriple++;
+      
+      barray[itriple][j1][j2][j] *= 2.0;
+    } // end loop over JJ
+    itriple++;
   } // end loop over elem3
   idouble++;
   } // end loop over elem1,elem2
+
+  if (bzero_flag) {
+    if (!wselfall_flag) {
+      itriple = (ielem*nelements+ielem)*nelements+ielem;
+      for(int JJ = 0; JJ < idxj_max; JJ++) {
+        const int j1 = idxj[JJ].j1;
+        const int j2 = idxj[JJ].j2;
+        const int j = idxj[JJ].j;
+        barray[itriple][j1][j2][j] -= bzero[j];
+      } // end loop over JJ
+    } else {
+      int itriple = 0;
+      int idouble = 0;
+      for(int elem1 = 0; elem1 < nelements; elem1++)
+      for(int elem2 = 0; elem2 < nelements; elem2++) {
+      for(int elem3 = 0; elem3 < nelements; elem3++) {
+        for(int JJ = 0; JJ < idxj_max; JJ++) {
+          const int j1 = idxj[JJ].j1;
+          const int j2 = idxj[JJ].j2;
+          const int j = idxj[JJ].j;
+          barray[itriple][j1][j2][j] -= bzero[j];
+        } // end loop over JJ
+        itriple++;
+      } // end loop over elem3
+      idouble++;
+      } // end loop over elem1,elem2
+    }
+  }
+
 #ifdef TIMING_INFO
   clock_gettime(CLOCK_REALTIME, &endtime);
   timers[2] += (endtime.tv_sec - starttime.tv_sec + 1.0 *
@@ -1031,39 +1057,23 @@ void SNA::copy_dbi2dbvec()
 
 /* ---------------------------------------------------------------------- */
 
-void SNA::zero_uarraytot()
+void SNA::initialize_uarraytot(int ielem)
 {
-  for(int ielem = 0; ielem < nelements; ielem++)
+
+  // utot(j,ma,mb) = 0
+
+  for(int jelem = 0; jelem < nelements; jelem++)
   for (int j = 0; j <= twojmax; j++)
-    for (int ma = 0; ma <= j; ma++)
+    for (int ma = 0; ma <= j; ma++) {
       for (int mb = 0; mb <= j; mb++) {
-        uarraytot_r[ielem][j][ma][mb] = 0.0;
-        uarraytot_i[ielem][j][ma][mb] = 0.0;
+        uarraytot_r[jelem][j][ma][mb] = 0.0;
+        uarraytot_i[jelem][j][ma][mb] = 0.0;
       }
-}
 
-/* ---------------------------------------------------------------------- */
+      // utot(j,ma,ma) = wself, sometimes
 
-void SNA::addself_uarraytot(double wself_in)
-{
-  for(int ielem = 0; ielem < nelements; ielem++)
-  for (int j = 0; j <= twojmax; j++)
-    for (int ma = 0; ma <= j; ma++) {
-      uarraytot_r[ielem][j][ma][ma] = wself_in;
-      uarraytot_i[ielem][j][ma][ma] = 0.0;
-    }
-}
-
-/* ----------------------------------------------------------------------
-   this is just for test purposes, adding self only to first element
-------------------------------------------------------------------------- */
-
-void SNA::addself_uarraytot_once(double wself_in, int ielem)
-{
-  for (int j = 0; j <= twojmax; j++)
-    for (int ma = 0; ma <= j; ma++) {
-      uarraytot_r[ielem][j][ma][ma] = wself_in;
-      uarraytot_i[ielem][j][ma][ma] = 0.0;
+      if (jelem == ielem || wselfall_flag)
+        uarraytot_r[jelem][j][ma][ma] = wself;
     }
 }
 
