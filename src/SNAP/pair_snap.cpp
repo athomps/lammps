@@ -1772,7 +1772,7 @@ void PairSNAP::read_param_file(char *paramfilename)
   bzeroflag = 1;
   quadraticflag = 0;
   alloyflag = 1;
-  wselfallflag = 1;
+  wselfallflag = 0;
 
   // open SNAP parameter file on proc 0
 

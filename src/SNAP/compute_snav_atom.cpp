@@ -49,7 +49,7 @@ ComputeSNAVAtom::ComputeSNAVAtom(LAMMPS *lmp, int narg, char **arg) :
   bzeroflag = 1;
   quadraticflag = 0;
   alloyflag = 1;
-  wselfallflag = 1;
+  wselfallflag = 0;
   
   // process required arguments
   
