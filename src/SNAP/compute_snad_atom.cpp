@@ -132,7 +132,8 @@ ComputeSNADAtom::ComputeSNADAtom(LAMMPS *lmp, int narg, char **arg) :
     } else error->all(FLERR,"Illegal compute snad/atom command");
   }
 
-  snaptr = new SNA*[comm->nthreads];
+  nthreads = comm->nthreads;
+  snaptr = new SNA*[nthreads];
 #if defined(_OPENMP)
 #pragma omp parallel default(none) shared(lmp,rfac0,twojmax,rmin0,switchflag,bzeroflag)
 #endif
@@ -169,6 +170,9 @@ ComputeSNADAtom::~ComputeSNADAtom()
   memory->destroy(wjelem);
   memory->destroy(cutsq);
   memory->destroy(map);
+
+  for (int tid = 0; tid<nthreads; tid++)
+    delete snaptr[tid];
   delete [] snaptr;
 }
 
