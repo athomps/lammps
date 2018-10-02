@@ -424,6 +424,11 @@ void SNA::compute_zi()
   for(int j1 = 0; j1 <= twojmax; j1++)
     for(int j2 = 0; j2 <= j1; j2++) {
       for(int j = j1 - j2; j <= MIN(twojmax, j1 + j2); j += 2) {
+
+        // Ignore assignments and integer operations
+        // Factors of j1+1 are upper bounds, off by about 3x
+        //  Nflops < (1/2)(j+1)^2*(j1+1)*((j1+1)*10+6)*nelements^2 
+
         double sumb1_r, sumb1_i;
         int ma2, mb2;
         for(int mb = 0; 2*mb <= j; mb++)
@@ -801,6 +806,9 @@ void SNA::compute_dbidrj()
     const int j1 = idxj[JJ].j1;
     const int j2 = idxj[JJ].j2;
     const int j = idxj[JJ].j;
+
+    // Flop-count, ignoring assignments and integer operations
+    //  Nflops = ((1/2)[(j+1)^2+(j1+1)^2+(j2+1)^2]*12 + 3*6)*nelements^2 
 
     for(int elem1 = 0; elem1 < nelements; elem1++)
     for(int elem2 = 0; elem2 < nelements; elem2++) {
