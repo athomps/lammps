@@ -1,3 +1,13 @@
+// Things to do:
+// Move mass updates into common function
+// Make barostat mass consistent with pdof
+// come up with better names for functions to reflect theory
+//    nhc_temp_integrate()
+//    nhc_press_integrate()
+//    nh_v_press()
+//    nh_v_temp()
+//    nh_omega_dot()
+
 /* ----------------------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
    http://lammps.sandia.gov, Sandia National Laboratories
@@ -153,6 +163,7 @@ FixNH::FixNH(LAMMPS *lmp, int narg, char **arg) :
       iarg += 4;
     } else if (strcmp(arg[iarg],"aniso") == 0) {
       if (iarg+4 > narg) error->all(FLERR,"Illegal fix nvt/npt/nph command");
+      //      pcouple = XYZ;
       pcouple = NONE;
       p_start[0] = p_start[1] = p_start[2] = force->numeric(FLERR,arg[iarg+1]);
       p_stop[0] = p_stop[1] = p_stop[2] = force->numeric(FLERR,arg[iarg+2]);
@@ -864,6 +875,10 @@ void FixNH::initial_integrate(int /*vflag*/)
 
   nve_v();
 
+  if (pstat_flag) {
+    nh_v_press();
+  }
+
   // remap simulation box by 1/2 step
 
   if (pstat_flag) remap();
@@ -885,6 +900,8 @@ void FixNH::initial_integrate(int /*vflag*/)
 
 void FixNH::final_integrate()
 {
+  if (pstat_flag) nh_v_press();
+
   nve_v();
 
   // re-compute temp before nh_v_press()
@@ -904,9 +921,16 @@ void FixNH::final_integrate()
   t_current = temperature->compute_scalar();
   tdof = temperature->dof;
 
+  // need to recompute pressure to account for change in KE
+  // t_current is up-to-date, but compute_temperature is not
+  // compute appropriately coupled elements of mvv_current
+
   if (pstat_flag) {
     if (pstyle == ISO) pressure->compute_scalar();
-    else pressure->compute_vector();
+    else {
+      temperature->compute_vector();
+      pressure->compute_vector();
+    }
     couple();
     pressure->addstep(update->ntimestep+1);
   }
@@ -1142,6 +1166,7 @@ void FixNH::remap()
     oldlo = domain->boxlo[0];
     oldhi = domain->boxhi[0];
     expfac = exp(dto*omega_dot[0]);
+    //    printf("expfacargx = %g\n",dto*omega_dot[0]);
     domain->boxlo[0] = (oldlo-fixedpoint[0])*expfac + fixedpoint[0];
     domain->boxhi[0] = (oldhi-fixedpoint[0])*expfac + fixedpoint[0];
   }
@@ -1150,6 +1175,7 @@ void FixNH::remap()
     oldlo = domain->boxlo[1];
     oldhi = domain->boxhi[1];
     expfac = exp(dto*omega_dot[1]);
+    //    printf("expfacargy = %g\n",dto*omega_dot[1]);
     domain->boxlo[1] = (oldlo-fixedpoint[1])*expfac + fixedpoint[1];
     domain->boxhi[1] = (oldhi-fixedpoint[1])*expfac + fixedpoint[1];
     if (scalexy) h[5] *= expfac;
@@ -1159,6 +1185,7 @@ void FixNH::remap()
     oldlo = domain->boxlo[2];
     oldhi = domain->boxhi[2];
     expfac = exp(dto*omega_dot[2]);
+    //    printf("expfacargz = %g\n",dto*omega_dot[2]);
     domain->boxlo[2] = (oldlo-fixedpoint[2])*expfac + fixedpoint[2];
     domain->boxhi[2] = (oldhi-fixedpoint[2])*expfac + fixedpoint[2];
     if (scalexz) h[4] *= expfac;
@@ -1942,9 +1969,12 @@ void FixNH::nh_v_press()
   int nlocal = atom->nlocal;
   if (igroup == atom->firstgroup) nlocal = atom->nfirst;
 
-  factor[0] = exp(-dt4*(omega_dot[0]+mtk_term2));
-  factor[1] = exp(-dt4*(omega_dot[1]+mtk_term2));
-  factor[2] = exp(-dt4*(omega_dot[2]+mtk_term2));
+  factor[0] = exp(-dt8*(omega_dot[0]+mtk_term2));
+  //  printf("expfacargvx = %g\n",dt8*(omega_dot[0]+mtk_term2));
+  factor[1] = exp(-dt8*(omega_dot[1]+mtk_term2));
+  //  printf("expfacargvy = %g\n",dt8*(omega_dot[1]+mtk_term2));
+  factor[2] = exp(-dt8*(omega_dot[2]+mtk_term2));
+  //  printf("expfacargvz = %g\n",dt8*(omega_dot[2]+mtk_term2));
 
   if (which == NOBIAS) {
     for (int i = 0; i < nlocal; i++) {
@@ -1987,6 +2017,12 @@ void FixNH::nh_v_press()
 
 void FixNH::nve_v()
 {
+  double e2=1.0/(2.0*3.0);
+  double e4=e2/(4.0*5.0);
+  double e6=e4/(6.0*7.0);
+  double e8=e6/(8.0*9.0);
+  double arg2, poly;
+
   double dtfm;
   double **v = atom->v;
   double **f = atom->f;
@@ -2001,18 +2037,36 @@ void FixNH::nve_v()
     for (int i = 0; i < nlocal; i++) {
       if (mask[i] & groupbit) {
         dtfm = dtf / rmass[i];
-        v[i][0] += dtfm*f[i][0];
-        v[i][1] += dtfm*f[i][1];
-        v[i][2] += dtfm*f[i][2];
+
+        arg2 = dt4*omega_dot[0];
+        poly = (((e8*arg2+e6)*arg2+e4)*arg2+e2)*arg2+1.0;
+        v[i][0] += dtfm*f[i][0] * poly;
+
+        arg2 = dt4*omega_dot[1];
+        poly = (((e8*arg2+e6)*arg2+e4)*arg2+e2)*arg2+1.0;
+        v[i][1] += dtfm*f[i][1] * poly;
+
+        arg2 = dt4*omega_dot[2];
+        poly = (((e8*arg2+e6)*arg2+e4)*arg2+e2)*arg2+1.0;
+        v[i][2] += dtfm*f[i][2] * poly;
       }
     }
   } else {
     for (int i = 0; i < nlocal; i++) {
       if (mask[i] & groupbit) {
         dtfm = dtf / mass[type[i]];
-        v[i][0] += dtfm*f[i][0];
-        v[i][1] += dtfm*f[i][1];
-        v[i][2] += dtfm*f[i][2];
+
+        arg2 = dt4*omega_dot[0];
+        poly = (((e8*arg2+e6)*arg2+e4)*arg2+e2)*arg2+1.0;
+        v[i][0] += dtfm*f[i][0] * poly;
+
+        arg2 = dt4*omega_dot[1];
+        poly = (((e8*arg2+e6)*arg2+e4)*arg2+e2)*arg2+1.0;
+        v[i][1] += dtfm*f[i][1] * poly;
+
+        arg2 = dt4*omega_dot[2];
+        poly = (((e8*arg2+e6)*arg2+e4)*arg2+e2)*arg2+1.0;
+        v[i][2] += dtfm*f[i][2] * poly;
       }
     }
   }
@@ -2024,6 +2078,12 @@ void FixNH::nve_v()
 
 void FixNH::nve_x()
 {
+  double e2=1.0/(2.0*3.0);
+  double e4=e2/(4.0*5.0);
+  double e6=e4/(6.0*7.0);
+  double e8=e6/(8.0*9.0);
+  double arg2, poly;
+
   double **x = atom->x;
   double **v = atom->v;
   int *mask = atom->mask;
@@ -2034,9 +2094,17 @@ void FixNH::nve_x()
 
   for (int i = 0; i < nlocal; i++) {
     if (mask[i] & groupbit) {
-      x[i][0] += dtv * v[i][0];
-      x[i][1] += dtv * v[i][1];
-      x[i][2] += dtv * v[i][2];
+      arg2 = dto*omega_dot[0];
+      poly = (((e8*arg2+e6)*arg2+e4)*arg2+e2)*arg2+1.0;
+      x[i][0] += dtv * v[i][0] * poly;
+
+      arg2 = dto*omega_dot[1];
+      poly = (((e8*arg2+e6)*arg2+e4)*arg2+e2)*arg2+1.0;
+      x[i][1] += dtv * v[i][1] * poly;
+
+      arg2 = dto*omega_dot[2];
+      poly = (((e8*arg2+e6)*arg2+e4)*arg2+e2)*arg2+1.0;
+      x[i][2] += dtv * v[i][2] * poly;
     }
   }
 }
@@ -2270,7 +2338,7 @@ void FixNH::nh_omega_dot()
       omega_dot[i] += f_omega*dthalf;
       omega_dot[i] *= pdrag_factor;
     }
-
+  //  printf("omega_dot[0] %g\n",omega_dot[0]); 
   mtk_term2 = 0.0;
   if (mtk_flag) {
     for (int i = 0; i < 3; i++)
