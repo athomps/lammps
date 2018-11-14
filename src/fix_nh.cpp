@@ -39,6 +39,7 @@
 #include "modify.h"
 #include "fix_deform.h"
 #include "compute.h"
+#include "compute_pressure.h"
 #include "kspace.h"
 #include "update.h"
 #include "respa.h"
@@ -163,7 +164,6 @@ FixNH::FixNH(LAMMPS *lmp, int narg, char **arg) :
       iarg += 4;
     } else if (strcmp(arg[iarg],"aniso") == 0) {
       if (iarg+4 > narg) error->all(FLERR,"Illegal fix nvt/npt/nph command");
-      //      pcouple = XYZ;
       pcouple = NONE;
       p_start[0] = p_start[1] = p_start[2] = force->numeric(FLERR,arg[iarg+1]);
       p_stop[0] = p_stop[1] = p_stop[2] = force->numeric(FLERR,arg[iarg+2]);
@@ -502,6 +502,9 @@ FixNH::FixNH(LAMMPS *lmp, int narg, char **arg) :
     else if (pcouple == XYZ || (dimension == 2 && pcouple == XY)) pstyle = ISO;
     else pstyle = ANISO;
 
+    //    //*** craxy, gjust for debugging
+    //    pcouple = XYZ;
+
     // pre_exchange only required if flips can occur due to shape changes
 
     if (flipflag && (p_flag[3] || p_flag[4] || p_flag[5]))
@@ -788,7 +791,7 @@ void FixNH::setup(int /*vflag*/)
 
   if (pstat_flag) {
     if (pstyle == ISO) pressure->compute_scalar();
-    else pressure->compute_vector();
+    else ((ComputePressure *)pressure)->compute_vector_ke_scalar();
     couple();
     pressure->addstep(update->ntimestep+1);
   }
@@ -861,7 +864,7 @@ void FixNH::initial_integrate(int /*vflag*/)
       pressure->compute_scalar();
     } else {
       temperature->compute_vector();
-      pressure->compute_vector();
+      ((ComputePressure *)pressure)->compute_vector_ke_scalar();
     }
     couple();
     pressure->addstep(update->ntimestep+1);
@@ -929,7 +932,7 @@ void FixNH::final_integrate()
     if (pstyle == ISO) pressure->compute_scalar();
     else {
       temperature->compute_vector();
-      pressure->compute_vector();
+      ((ComputePressure *)pressure)->compute_vector_ke_scalar();
     }
     couple();
     pressure->addstep(update->ntimestep+1);
@@ -981,7 +984,7 @@ void FixNH::initial_integrate_respa(int /*vflag*/, int ilevel, int /*iloop*/)
         pressure->compute_scalar();
       } else {
         temperature->compute_vector();
-        pressure->compute_vector();
+        ((ComputePressure *)pressure)->compute_vector_ke_scalar();
       }
       couple();
       pressure->addstep(update->ntimestep+1);
