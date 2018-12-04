@@ -1,6 +1,7 @@
 // Things to do:
 // Move mass updates into common function
 // Make barostat mass consistent with pdof
+// Pay special attention to ISO
 // come up with better names for functions to reflect theory
 //    nhc_temp_integrate()
 //    nhc_press_integrate()
@@ -843,6 +844,11 @@ void FixNH::setup(int /*vflag*/)
 
 void FixNH::initial_integrate(int /*vflag*/)
 {
+
+  // update extended masses, if requested
+
+  update_extended_mass();
+
   // update eta_press_dot
 
   if (pstat_flag && mpchain) nhc_press_integrate();
@@ -1787,14 +1793,6 @@ void FixNH::nhc_temp_integrate()
   double expfac;
   double kecurrent = tdof * boltz * t_current;
 
-  // Update masses, to preserve initial freq, if flag set
-
-  if (eta_mass_flag) {
-    eta_mass[0] = tdof * boltz * t_target / (t_freq*t_freq);
-    for (int ich = 1; ich < mtchain; ich++)
-      eta_mass[ich] = boltz * t_target / (t_freq*t_freq);
-  }
-
   if (eta_mass[0] > 0.0)
     eta_dotdot[0] = (kecurrent - ke_target)/eta_mass[0];
   else eta_dotdot[0] = 0.0;
@@ -1859,32 +1857,6 @@ void FixNH::nhc_press_integrate()
   double kt = boltz * t_target;
   double lkt_press;
 
-  // Update masses, to preserve initial freq, if flag set
-
-  if (omega_mass_flag) {
-    double nkt = (atom->natoms + 1) * kt;
-    for (int i = 0; i < 3; i++)
-      if (p_flag[i])
-        omega_mass[i] = nkt/(p_freq[i]*p_freq[i]);
-
-    if (pstyle == TRICLINIC) {
-      for (int i = 3; i < 6; i++)
-        if (p_flag[i]) omega_mass[i] = nkt/(p_freq[i]*p_freq[i]);
-    }
-  }
-
-  if (etap_mass_flag) {
-    if (mpchain) {
-      etap_mass[0] = boltz * t_target / (p_freq_max*p_freq_max);
-      for (int ich = 1; ich < mpchain; ich++)
-        etap_mass[ich] = boltz * t_target / (p_freq_max*p_freq_max);
-      for (int ich = 1; ich < mpchain; ich++)
-        etap_dotdot[ich] =
-          (etap_mass[ich-1]*etap_dot[ich-1]*etap_dot[ich-1] -
-           boltz * t_target) / etap_mass[ich];
-    }
-  }
-
   kecurrent = 0.0;
   pdof = 0;
   for (i = 0; i < 3; i++)
@@ -1901,7 +1873,8 @@ void FixNH::nhc_press_integrate()
       }
   }
 
-  lkt_press = pdof * kt;
+  if (pstyle == ISO) lkt_press = kt;
+  else lkt_press = pdof * kt;
   etap_dotdot[0] = (kecurrent - lkt_press)/etap_mass[0];
 
   double ncfac = 1.0/nc_pchain;
@@ -1910,6 +1883,9 @@ void FixNH::nhc_press_integrate()
     for (ich = mpchain-1; ich > 0; ich--) {
       expfac = exp(-ncfac*dt8*etap_dot[ich+1]);
       etap_dot[ich] *= expfac;
+      etap_dotdot[ich] =
+        (etap_mass[ich-1]*etap_dot[ich-1]*etap_dot[ich-1] -
+         boltz * t_target) / etap_mass[ich];
       etap_dot[ich] += etap_dotdot[ich] * ncfac*dt4;
       etap_dot[ich] *= pdrag_factor;
       etap_dot[ich] *= expfac;
@@ -2361,6 +2337,41 @@ void FixNH::nh_omega_dot()
       }
     }
   }
+}
+
+/* ----------------------------------------------------------------------
+   update extended system masses, to preserve initial freq, if flag set
+------------------------------------------------------------------------- */
+
+void FixNH::update_extended_mass() {
+  double kt = boltz * t_target;
+
+  if (eta_mass_flag) {
+    eta_mass[0] = tdof * boltz * t_target / (t_freq*t_freq);
+    for (int ich = 1; ich < mtchain; ich++)
+      eta_mass[ich] = boltz * t_target / (t_freq*t_freq);
+  }
+
+  if (omega_mass_flag) {
+    double nkt = (atom->natoms + 1) * kt;
+    for (int i = 0; i < 3; i++)
+      if (p_flag[i])
+        omega_mass[i] = nkt/(p_freq[i]*p_freq[i]);
+
+    if (pstyle == TRICLINIC) {
+      for (int i = 3; i < 6; i++)
+        if (p_flag[i]) omega_mass[i] = nkt/(p_freq[i]*p_freq[i]);
+    }
+  }
+
+  if (etap_mass_flag) {
+    if (mpchain) {
+      etap_mass[0] = boltz * t_target / (p_freq_max*p_freq_max);
+      for (int ich = 1; ich < mpchain; ich++)
+        etap_mass[ich] = boltz * t_target / (p_freq_max*p_freq_max);
+    }
+  }
+
 }
 
 /* ----------------------------------------------------------------------

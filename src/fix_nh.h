@@ -126,6 +126,7 @@ class FixNH : public Fix {
   virtual void remap();
   void nhc_temp_integrate();
   void nhc_press_integrate();
+  void update_extended_mass();
 
   virtual void nve_x();            // may be overwritten by child classes
   virtual void nve_v();
