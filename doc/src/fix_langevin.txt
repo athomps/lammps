@@ -259,6 +259,27 @@ velocity distribution, such as the velocity auto-correlation function
 (VACF). In this example, the velocity distribution at dt = 2.5fs
 generates an average temperature of 220 K, instead of 300 K.
 
+NOTE: For the different variants of the Langevin model supported by this
+fix, there are many possible time integration schemes, each with its own
+strengths and weaknesses. Many of these methods are reviewed and analyzed
+by "Leimkuhler"_#Leimkuhler. When this fix is used together with 
+"fix nve"_fix_nve.html time i.e. the velocity Verlet
+integrator and the default setting {gjf} = no:
+
+:c,image(Eqs/fix_langevin1.jpg)
+
+This scheme is similar but not identical to the widely used "BBK"_#BBK scheme. 
+With {gjf} = yes, the integration scheme is:
+
+:c,image(Eqs/fix_langevin2.jpg)
+
+This scheme is similar but not identical to the actual scheme proposed by 
+"Gronbech-Jensen/Farago"_#Gronbech-Jensen:
+
+:c,image(Eqs/fix_langevin3.jpg)
+
+In all these equations, we use the notation of "Gronbech-Jensen/Farago"_#Gronbech-Jensen.
+
 :line
 
 Styles with a {gpu}, {intel}, {kk}, {omp}, or {opt} suffix are
@@ -340,4 +361,13 @@ types, tally = no, zero = no, gjf = no.
 :link(Gronbech-Jensen)
 [(Gronbech-Jensen)] Gronbech-Jensen and Farago, Mol Phys, 111, 983
 (2013); Gronbech-Jensen, Hayre, and Farago, Comp Phys Comm,
-185, 524 (2014)
+185, 524 (2014).
+
+:link(Leimkuhler)
+[(Leimkuhler)] B. Leimkuhler, C. Matthews, Appl. Math. Res. Express
+2013, 34 (2012).
+
+:link(BBK)
+[(BBK)] A. Brunger, C. L. Brooks, and M. Karplus, Chem. Phys.
+Lett. 105, 495 (1984).
+

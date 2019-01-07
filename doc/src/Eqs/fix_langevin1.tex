@@ -1,0 +1,17 @@
+\documentclass[24pt]{article}
+
+\pagestyle{empty}
+\Huge
+\newcommand{\myhalf}{\frac{1}{2}}
+
+\begin{document}
+
+\begin{eqnarray*}
+v^{n+\myhalf}  &=& v^n + \frac{dt}{2m} f^n -  \frac{\alpha dt}{2m} v^{n-\myhalf} + \frac{\beta^n}{2m} \\
+r^{n+1}  &=& r^n + dt~v^{n+\myhalf}  \\
+v^{n+1}  &=& v^{n+\myhalf} + \frac{dt}{2m} f^{n+1} -  \frac{\alpha dt}{2m} v^{n+\myhalf} + \frac{\beta^{n+1}}{2m} \\
+{\tt or} \\
+r^{n+1}  &=& 2r^n - r^{n-1} + \frac{dt}{m} \left [ dt~f^n -  dt~\alpha v^{n-\myhalf} + \beta^n \right ] \\
+\end{eqnarray*}
+
+\end{document}
