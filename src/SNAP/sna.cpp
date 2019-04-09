@@ -813,23 +813,17 @@ void SNA::compute_dbidrj()
     for(int elem1 = 0; elem1 < nelements; elem1++)
     for(int elem2 = 0; elem2 < nelements; elem2++) {
 
-    // zarray always for (elem1, elem2)
-  
-    idouble = elem1*nelements+elem2;
-
-    // sum over Conj(dudr(j,ma,mb))*z(j1,j2,j,ma,mb)
+    // sum over Conj(dudr(j,ma,mb,elem3))*z(j1,j2,ma,mb,elem1,elem2)
+    // accumulate to B(j1,j2,j,elem1,elem2,elem3)
     
+    idouble = elem1*nelements+elem2;
     itriple = (elem1*nelements+elem2)*nelements+elem3;
-
     dbdr = dbarray[itriple][j1][j2][j];
+    jjjzarray_r = zarray_r[idouble][j1][j2][j];
+    jjjzarray_i = zarray_i[idouble][j1][j2][j];
 
     for(int k = 0; k < 3; k++)
       sumzdu_r[k] = 0.0;
-
-    // no need to check for j2 <= j1 symmetry of zarray
-    
-    jjjzarray_r = zarray_r[idouble][j1][j2][j];
-    jjjzarray_i = zarray_i[idouble][j1][j2][j];
 
     for(int mb = 0; 2*mb < j; mb++)
       for(int ma = 0; ma <= j; ma++) {
@@ -873,24 +867,17 @@ void SNA::compute_dbidrj()
     for(int k = 0; k < 3; k++)
       dbdr[k] += 2.0*sumzdu_r[k];
 
-    // sum over Conj(dudr(j1,ma1,mb1))*z(j,j2,j1,ma1,mb1)
-
+    // sum over Conj(dudr(j1,ma1,mb1,elem3))*z(j,j2,ma1,mb1,elem1,elem2)
+    // accumulate to B(j1,j2,j,elem3,elem2,elem1)
+    
+    idouble = elem1*nelements+elem2;
     itriple = (elem3*nelements+elem2)*nelements+elem1;
     dbdr = dbarray[itriple][j1][j2][j];
+    jjjzarray_r = zarray_r[idouble][j][j2][j1];
+    jjjzarray_i = zarray_i[idouble][j][j2][j1];
 
     for(int k = 0; k < 3; k++)
       sumzdu_r[k] = 0.0;
-
-    //  use zarray j1/j2 symmetry
-
-    if (j >= j2) {
-      jjjzarray_r = zarray_r[idouble][j][j2][j1];
-      jjjzarray_i = zarray_i[idouble][j][j2][j1];
-    } else {
-      printf("sna.cpp:Aaah1! This should never happen\n");
-      jjjzarray_r = zarray_r[idouble][j2][j][j1];
-      jjjzarray_i = zarray_i[idouble][j2][j][j1];
-    }
 
     for(int mb1 = 0; 2*mb1 < j1; mb1++)
       for(int ma1 = 0; ma1 <= j1; ma1++) {
@@ -934,24 +921,17 @@ void SNA::compute_dbidrj()
     for(int k = 0; k < 3; k++)
       dbdr[k] += 2.0*sumzdu_r[k];
 
-    // sum over Conj(dudr(j2,ma2,mb2))*z(j1,j,j2,ma2,mb2)
-
+    // sum over Conj(dudr(j2,ma2,mb2,elem3))*z(j,j1,ma2,mb2,elem2,elem1)
+    // accumulate to B(j1,j2,j,elem1,elem3,elem2)
+    
+    idouble = elem2*nelements+elem1;
     itriple = (elem1*nelements+elem3)*nelements+elem2;
     dbdr = dbarray[itriple][j1][j2][j];
+    jjjzarray_r = zarray_r[idouble][j][j1][j2];
+    jjjzarray_i = zarray_i[idouble][j][j1][j2];
 
     for(int k = 0; k < 3; k++)
       sumzdu_r[k] = 0.0;
-
-    // use zarray j1/j2 symmetry (optional)
-
-    if (j1 > j) {
-      printf("sna.cpp:Aaah2! This should never happen\n");
-      jjjzarray_r = zarray_r[idouble][j1][j][j2];
-      jjjzarray_i = zarray_i[idouble][j1][j][j2];
-    } else {
-      jjjzarray_r = zarray_r[idouble][j][j1][j2];
-      jjjzarray_i = zarray_i[idouble][j][j1][j2];
-    }
 
     for(int mb2 = 0; 2*mb2 < j2; mb2++)
       for(int ma2 = 0; ma2 <= j2; ma2++) {
