@@ -48,6 +48,7 @@ public:
   void compute_ui_omp(int, int);
   void compute_zi();
   void compute_zi_omp(int);
+  void compute_yi(double*);
   void compute_bi(int);
   void copy_bi2bvec();
 
@@ -55,6 +56,7 @@ public:
 
   void compute_duidrj(double*, double, double, int);
   void compute_dbidrj();
+  void compute_deidrj(double*);
   void copy_dbi2dbvec();
   double compute_sfac(double, double);
   double compute_dsfac(double, double);
@@ -81,6 +83,7 @@ public:
   int twojmax, diagonalstyle;
   double**** uarraytot_r, **** uarraytot_i;
   double****** zarray_r, ****** zarray_i;
+  double**** yarray_r, **** yarray_i;
   double**** uarraytot_r_b, **** uarraytot_i_b;
   double****** zarray_r_b, ****** zarray_i_b;
   double*** uarray_r, *** uarray_i;
