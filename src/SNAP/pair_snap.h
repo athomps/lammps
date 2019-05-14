@@ -29,8 +29,6 @@ public:
   PairSNAP(class LAMMPS *);
   ~PairSNAP();
   virtual void compute(int, int);
-  void compute_regular(int, int);
-  void compute_optimized(int, int);
   void settings(int, char **);
   virtual void coeff(int, char **);
   virtual void init_style();
@@ -40,57 +38,12 @@ public:
 protected:
   int ncoeff, ncoeffq, ncoeffall;
   double **bvec, ***dbvec;
-  class SNA** sna;
+  class SNA* snaptr;
   int nmax;
-  int nthreads;
   virtual void allocate();
   void read_coeff_file(char *);
   void read_param_file(char *);
-  inline int equal(double* x,double* y);
   inline double dist2(double* x,double* y);
-  double extra_cutoff();
-  void load_balance();
-  void set_sna_to_shared(int snaid,int i);
-  void build_per_atom_arrays();
-
-  int schedule_user;
-  double schedule_time_guided;
-  double schedule_time_dynamic;
-
-  int ncalls_neigh;
-  int do_load_balance;
-  int ilistmask_max;
-  int* ilistmask;
-  int ghostinum;
-  int ghostilist_max;
-  int* ghostilist;
-  int ghostnumneigh_max;
-  int* ghostnumneigh;
-  int* ghostneighs;
-  int* ghostfirstneigh;
-  int ghostneighs_total;
-  int ghostneighs_max;
-
-  int use_optimized;
-  int use_shared_arrays;
-
-  int i_max;
-  int i_neighmax;
-  int i_numpairs;
-  int **i_pairs;
-  double ***i_rij;
-  int **i_inside;
-  double **i_wj;
-  double **i_rcutij;
-  int **i_element;
-  int *i_ninside;
-  double *****i_uarraytot_r, *****i_uarraytot_i;
-  double *******i_zarray_r, *******i_zarray_i;
-
-#ifdef TIMING_INFO
-  //  timespec starttime, endtime;
-  double timers[4];
-#endif
 
   double rcutmax;               // max cutoff for all elements
   int nelements;                // # of unique elements

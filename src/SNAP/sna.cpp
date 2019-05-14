@@ -21,7 +21,6 @@
 #include "math_extra.h"
 #include <cstring>
 #include <cstdlib>
-#include "openmp_snap.h"
 
 #include "memory.h"
 #include "error.h"
@@ -157,13 +156,6 @@ SNA::SNA(LAMMPS* lmp, double rfac0_in,
       bzero[j] = www;
   }
 
-#ifdef TIMING_INFO
-  timers = new double[20];
-  for(int i = 0; i < 20; i++) timers[i] = 0;
-  print = 0;
-  counter = 0;
-#endif
-
   build_indexlist();
 
 }
@@ -172,16 +164,14 @@ SNA::SNA(LAMMPS* lmp, double rfac0_in,
 
 SNA::~SNA()
 {
-  if(!use_shared_arrays) {
-    destroy_twojmax_arrays();
-    memory->destroy(rij);
-    memory->destroy(inside);
-    memory->destroy(wj);
-    memory->destroy(rcutij);
-    memory->destroy(element);
-    memory->destroy(bvec);
-    memory->destroy(dbvec);
-  }
+  destroy_twojmax_arrays();
+  memory->destroy(rij);
+  memory->destroy(inside);
+  memory->destroy(wj);
+  memory->destroy(rcutij);
+  memory->destroy(element);
+  memory->destroy(bvec);
+  memory->destroy(dbvec);
   delete[] idxj;
 }
 
@@ -300,18 +290,16 @@ void SNA::grow_rij(int newnmax)
 
   nmax = newnmax;
 
-  if(!use_shared_arrays) {
-    memory->destroy(rij);
-    memory->destroy(inside);
-    memory->destroy(wj);
-    memory->destroy(rcutij);
-    memory->destroy(element);
-    memory->create(rij, nmax, 3, "sna:rij");
-    memory->create(inside, nmax, "sna:inside");
-    memory->create(wj, nmax, "sna:wj");
-    memory->create(rcutij, nmax, "sna:rcutij");
-    memory->create(element, nmax, "sna:element");
- }
+  memory->destroy(rij);
+  memory->destroy(inside);
+  memory->destroy(wj);
+  memory->destroy(rcutij);
+  memory->destroy(element);
+  memory->create(rij, nmax, 3, "sna:rij");
+  memory->create(inside, nmax, "sna:inside");
+  memory->create(wj, nmax, "sna:wj");
+  memory->create(rcutij, nmax, "sna:rcutij");
+  memory->create(element, nmax, "sna:element");
 }
 /* ----------------------------------------------------------------------
    compute Ui by summing over neighbors j
@@ -327,10 +315,6 @@ void SNA::compute_ui(int jnum, int ielem)
   //   compute r0 = (x,y,z,z0)
   //   utot(j,ma,mb) += u(r0;j,ma,mb) for all j,ma,mb
 
-#ifdef TIMING_INFO
-  clock_gettime(CLOCK_REALTIME, &starttime);
-#endif
-
   for(int j = 0; j < jnum; j++) {
     x = rij[j][0];
     y = rij[j][1];
@@ -345,47 +329,6 @@ void SNA::compute_ui(int jnum, int ielem)
     compute_uarray(x, y, z, z0, r);
     add_uarraytot(r, wj[j], rcutij[j], element[j]);
  }
-
-#ifdef TIMING_INFO
-  clock_gettime(CLOCK_REALTIME, &endtime);
-  timers[0] += (endtime.tv_sec - starttime.tv_sec + 1.0 *
-                (endtime.tv_nsec - starttime.tv_nsec) / 1000000000);
-#endif
-
-}
-
-void SNA::compute_ui_omp(int jnum, int sub_threads)
-{
-  double rsq, r, x, y, z, z0, theta0;
-
-  // this is wrong for nelements > 1, but I don't know how to fix it easily
-  int ielem = 0;
-  initialize_uarraytot(ielem);
-
-  // for j in neighbors of i:
-  //   compute r0 = (x,y,z,z0)
-  //   utot(j,ma,mb) += u(r0;j,ma,mb) for all j,ma,mb
-
-  for(int j = 0; j < jnum; j++) {
-    x = rij[j][0];
-    y = rij[j][1];
-    z = rij[j][2];
-    rsq = x * x + y * y + z * z;
-    r = sqrt(rsq);
-    theta0 = (r - rmin0) * rfac0 * MY_PI / (rcutij[j] - rmin0);
-    //    theta0 = (r - rmin0) * rscale0;
-    z0 = r / tan(theta0);
-    omp_set_num_threads(sub_threads);
-
-#if defined(_OPENMP)
-#pragma omp parallel shared(x,y,z,z0,r,sub_threads) default(none)
-#endif
-    {
-      compute_uarray_omp(x, y, z, z0, r, sub_threads);
-    }
-    add_uarraytot(r, wj[j], rcutij[j], element[j]);
-  }
-
 }
 
 /* ----------------------------------------------------------------------
@@ -409,10 +352,6 @@ void SNA::compute_zi()
   //                  u(j1,ma1,mb1) * u(j2,ma2,mb2)
   //              z(j1,j2,j,ma,mb) += sumb1*cg(j1,ma1,j2,ma2,j)
   //        z(j1,j2,j,ma,mb) /= j+1
-
-#ifdef TIMING_INFO
-  clock_gettime(CLOCK_REALTIME, &starttime);
-#endif
 
   // compute_dbidrj() requires full j1/j2/j chunk of z elements
   // use zarray j1/j2 symmetry
@@ -466,92 +405,11 @@ void SNA::compute_zi()
   idouble++;
   } // end loop over elem1,elem2
 
-#ifdef TIMING_INFO
-  clock_gettime(CLOCK_REALTIME, &endtime);
-  timers[1] += (endtime.tv_sec - starttime.tv_sec + 1.0 *
-                (endtime.tv_nsec - starttime.tv_nsec) / 1000000000);
-#endif
-}
-
-void SNA::compute_zi_omp(int sub_threads)
-{
-  // for j1 = 0,...,twojmax
-  //   for j2 = 0,twojmax
-  //     for j = |j1-j2|,Min(twojmax,j1+j2),2
-  //        for ma = 0,...,j
-  //          for mb = 0,...,j
-  //            z(j1,j2,j,ma,mb) = 0
-  //            for ma1 = Max(0,ma+(j1-j2-j)/2),Min(j1,ma+(j1+j2-j)/2)
-  //              sumb1 = 0
-  //              ma2 = ma-ma1+(j1+j2-j)/2;
-  //              for mb1 = Max(0,mb+(j1-j2-j)/2),Min(j1,mb+(j1+j2-j)/2)
-  //                mb2 = mb-mb1+(j1+j2-j)/2;
-  //                sumb1 += cg(j1,mb1,j2,mb2,j) *
-  //                  u(j1,ma1,mb1) * u(j2,ma2,mb2)
-  //              z(j1,j2,j,ma,mb) += sumb1*cg(j1,ma1,j2,ma2,j)
-  //        z(j1,j2,j,ma,mb) /= j+1
-
-  if(omp_in_parallel())
-    omp_set_num_threads(sub_threads);
-
-  // compute_dbidrj() requires full j1/j2/j chunk of z elements
-  // use zarray j1/j2 symmetry
-  // loop over all element pairs (elem1, elem2)
-  
-  int idouble = 0;
-  for(int elem1 = 0; elem1 < nelements; elem1++)
-  for(int elem2 = 0; elem2 < nelements; elem2++) {
-  
-#if defined(_OPENMP)
-#pragma omp parallel for schedule(auto) default(none) shared(idouble,elem1,elem2)
-#endif
-  for(int j1 = 0; j1 <= twojmax; j1++)
-    for(int j2 = 0; j2 <= j1; j2++)
-      for(int j = abs(j1 - j2); j <= MIN(twojmax, j1 + j2); j += 2) {
-
-    double sumb1_r, sumb1_i;
-    int ma2, mb2;
-
-    for(int ma = 0; ma <= j; ma++)
-      for(int mb = 0; mb <= j; mb++) {
-        zarray_r[idouble][j1][j2][j][ma][mb] = 0.0;
-        zarray_i[idouble][j1][j2][j][ma][mb] = 0.0;
-
-        for(int ma1 = MAX(0, (2 * ma - j - j2 + j1) / 2);
-            ma1 <= MIN(j1, (2 * ma - j + j2 + j1) / 2); ma1++) {
-          sumb1_r = 0.0;
-          sumb1_i = 0.0;
-
-          ma2 = (2 * ma - j - (2 * ma1 - j1) + j2) / 2;
-
-          for(int mb1 = MAX(0, (2 * mb - j - j2 + j1) / 2);
-              mb1 <= MIN(j1, (2 * mb - j + j2 + j1) / 2); mb1++) {
-
-            mb2 = (2 * mb - j - (2 * mb1 - j1) + j2) / 2;
-            sumb1_r += cgarray[j1][j2][j][mb1][mb2] *
-              (uarraytot_r[elem1][j1][ma1][mb1] * uarraytot_r[elem2][j2][ma2][mb2] -
-               uarraytot_i[elem1][j1][ma1][mb1] * uarraytot_i[elem2][j2][ma2][mb2]);
-            sumb1_i += cgarray[j1][j2][j][mb1][mb2] *
-              (uarraytot_r[elem1][j1][ma1][mb1] * uarraytot_i[elem2][j2][ma2][mb2] +
-               uarraytot_i[elem1][j1][ma1][mb1] * uarraytot_r[elem2][j2][ma2][mb2]);
-          }
-
-          zarray_r[idouble][j1][j2][j][ma][mb] +=
-            sumb1_r * cgarray[j1][j2][j][ma1][ma2]/(j+1);
-          zarray_i[idouble][j1][j2][j][ma][mb] +=
-            sumb1_i * cgarray[j1][j2][j][ma1][ma2]/(j+1);
-        }
-      }
-  }
-  idouble++;
-  } // end loop over elem1,elem2
 }
 
 /* ----------------------------------------------------------------------
    compute Yi by summing over products of beta and Zi
 ------------------------------------------------------------------------- */
-
-//    itriple = (elem1*nelements+elem2)*nelements+elem3;
 
 void SNA::compute_yi(double* beta)
 {
@@ -678,8 +536,8 @@ void SNA::compute_deidrj(double* dedr)
 
   for(int k = 0; k < 3; k++)
     dedr[k] *= 2.0;
-
 }
+
 
 /* ----------------------------------------------------------------------
    compute Bi by summing conj(Ui)*Zi
@@ -695,10 +553,6 @@ void SNA::compute_bi(int ielem)
   //          for ma = 0,...,j
   //            b(j1,j2,j) +=
   //              2*Conj(u(j,ma,mb))*z(j1,j2,j,ma,mb)/(j+1)
-
-#ifdef TIMING_INFO
-  clock_gettime(CLOCK_REALTIME, &starttime);
-#endif
 
   // loop over all element triples (elem1, elem2, elem3)
   
@@ -775,13 +629,6 @@ void SNA::compute_bi(int ielem)
       } // end loop over elem1,elem2
     }
   }
-
-#ifdef TIMING_INFO
-  clock_gettime(CLOCK_REALTIME, &endtime);
-  timers[2] += (endtime.tv_sec - starttime.tv_sec + 1.0 *
-                (endtime.tv_nsec - starttime.tv_nsec) / 1000000000);
-#endif
-
 }
 
 /* ----------------------------------------------------------------------
@@ -853,19 +700,8 @@ void SNA::compute_duidrj(double* rij, double wj, double rcut, int jelem)
   z0 = r * cs / sn;
   dz0dr = z0 / r - (r*rscale0) * (rsq + z0 * z0) / rsq;
 
-#ifdef TIMING_INFO
-  clock_gettime(CLOCK_REALTIME, &starttime);
-#endif
-
   elem_duarray = jelem;
   compute_duarray(x, y, z, z0, r, dz0dr, wj, rcut);
-  
-#ifdef TIMING_INFO
-  clock_gettime(CLOCK_REALTIME, &endtime);
-  timers[3] += (endtime.tv_sec - starttime.tv_sec + 1.0 *
-                (endtime.tv_nsec - starttime.tv_nsec) / 1000000000);
-#endif
-
 }
 
 /* ----------------------------------------------------------------------
@@ -905,10 +741,6 @@ void SNA::compute_dbidrj()
   double** jjjzarray_i;
   double jjjmambzarray_r;
   double jjjmambzarray_i;
-
-#ifdef TIMING_INFO
-  clock_gettime(CLOCK_REALTIME, &starttime);
-#endif
 
   int idouble;
   int itriple;
@@ -1111,13 +943,6 @@ void SNA::compute_dbidrj()
 
     } // end loop over elem1,elem2
   } //end loop over j1 j2 j
-
-#ifdef TIMING_INFO
-  clock_gettime(CLOCK_REALTIME, &endtime);
-  timers[4] += (endtime.tv_sec - starttime.tv_sec + 1.0 *
-                (endtime.tv_nsec - starttime.tv_nsec) / 1000000000);
-#endif
-
 }
 
 /* ----------------------------------------------------------------------
@@ -1221,27 +1046,6 @@ void SNA::add_uarraytot(double r, double wj, double rcut, int ielem)
       }
 }
 
-void SNA::add_uarraytot_omp(double r, double wj, double rcut, int ielem)
-{
-  double sfac;
-
-  sfac = compute_sfac(r, rcut);
-
-  sfac *= wj;
-
-#if defined(_OPENMP)
-#pragma omp for
-#endif
-  for (int j = 0; j <= twojmax; j++)
-    for (int ma = 0; ma <= j; ma++)
-      for (int mb = 0; mb <= j; mb++) {
-        uarraytot_r[ielem][j][ma][mb] +=
-          sfac * uarray_r[j][ma][mb];
-        uarraytot_i[ielem][j][ma][mb] +=
-          sfac * uarray_i[j][ma][mb];
-      }
-}
-
 /* ----------------------------------------------------------------------
    compute Wigner U-functions for one neighbor
 ------------------------------------------------------------------------- */
@@ -1314,88 +1118,6 @@ void SNA::compute_uarray(double x, double y, double z,
           uarray_i[j][j-ma][j-mb] = uarray_i[j][ma][mb];
         }
       }
-    }
-  }
-}
-
-void SNA::compute_uarray_omp(double x, double y, double z,
-                             double z0, double r, int sub_threads)
-{
-  double r0inv;
-  double a_r, b_r, a_i, b_i;
-  double rootpq;
-
-  // compute Cayley-Klein parameters for unit quaternion
-
-  r0inv = 1.0 / sqrt(r * r + z0 * z0);
-  a_r = r0inv * z0;
-  a_i = -r0inv * z;
-  b_r = r0inv * y;
-  b_i = -r0inv * x;
-
-  // VMK Section 4.8.2
-
-  uarray_r[0][0][0] = 1.0;
-  uarray_i[0][0][0] = 0.0;
-
-  for (int j = 1; j <= twojmax; j++) {
-#if defined(_OPENMP)
-#pragma omp for
-#endif
-    for (int mb = 0; mb < j; mb++) {
-      uarray_r[j][0][mb] = 0.0;
-      uarray_i[j][0][mb] = 0.0;
-
-      for (int ma = 0; ma < j; ma++) {
-        rootpq = rootpqarray[j - ma][j - mb];
-        uarray_r[j][ma][mb] +=
-          rootpq *
-          (a_r * uarray_r[j - 1][ma][mb] +
-           a_i * uarray_i[j - 1][ma][mb]);
-        uarray_i[j][ma][mb] +=
-          rootpq *
-          (a_r * uarray_i[j - 1][ma][mb] -
-           a_i * uarray_r[j - 1][ma][mb]);
-
-        rootpq = rootpqarray[ma + 1][j - mb];
-        uarray_r[j][ma + 1][mb] =
-          -rootpq *
-          (b_r * uarray_r[j - 1][ma][mb] +
-           b_i * uarray_i[j - 1][ma][mb]);
-        uarray_i[j][ma + 1][mb] =
-          -rootpq *
-          (b_r * uarray_i[j - 1][ma][mb] -
-           b_i * uarray_r[j - 1][ma][mb]);
-      }
-    }
-
-    int mb = j;
-    uarray_r[j][0][mb] = 0.0;
-    uarray_i[j][0][mb] = 0.0;
-
-#if defined(_OPENMP)
-#pragma omp for
-#endif
-    for (int ma = 0; ma < j; ma++) {
-      rootpq = rootpqarray[j - ma][mb];
-      uarray_r[j][ma][mb] +=
-        rootpq *
-        (b_r * uarray_r[j - 1][ma][mb - 1] -
-         b_i * uarray_i[j - 1][ma][mb - 1]);
-      uarray_i[j][ma][mb] +=
-        rootpq *
-        (b_r * uarray_i[j - 1][ma][mb - 1] +
-         b_i * uarray_r[j - 1][ma][mb - 1]);
-
-      rootpq = rootpqarray[ma + 1][mb];
-      uarray_r[j][ma + 1][mb] =
-        rootpq *
-        (a_r * uarray_r[j - 1][ma][mb - 1] -
-         a_i * uarray_i[j - 1][ma][mb - 1]);
-      uarray_i[j][ma + 1][mb] =
-        rootpq *
-        (a_r * uarray_i[j - 1][ma][mb - 1] +
-         a_i * uarray_r[j - 1][ma][mb - 1]);
     }
   }
 }
@@ -1627,21 +1349,19 @@ void SNA::create_twojmax_arrays()
   else
     bzero = NULL;
   
-  if(!use_shared_arrays) {
-    memory->create(uarraytot_r, nelements, jdim, jdim, jdim,
-                   "sna:uarraytot");
-    memory->create(uarraytot_i, nelements, jdim, jdim, jdim,
-                   "sna:uarraytot");
-
-    memory->create(zarray_r, ndoubles, jdim, jdim, jdim, jdim, jdim,
-                   "sna:zarray");
-    memory->create(zarray_i, ndoubles, jdim, jdim, jdim, jdim, jdim,
-                   "sna:zarray");
-    memory->create(yarray_r, nelements, jdim, jdim, jdim,
-                   "sna:yarray");
-    memory->create(yarray_i, nelements, jdim, jdim, jdim,
-                   "sna:yarray");
-  }
+  memory->create(uarraytot_r, nelements, jdim, jdim, jdim,
+                 "sna:uarraytot");
+  memory->create(uarraytot_i, nelements, jdim, jdim, jdim,
+                 "sna:uarraytot");
+  
+  memory->create(zarray_r, ndoubles, jdim, jdim, jdim, jdim, jdim,
+                 "sna:zarray");
+  memory->create(zarray_i, ndoubles, jdim, jdim, jdim, jdim, jdim,
+                 "sna:zarray");
+  memory->create(yarray_r, nelements, jdim, jdim, jdim,
+                 "sna:yarray");
+  memory->create(yarray_i, nelements, jdim, jdim, jdim,
+                 "sna:yarray");
 
 }
 
@@ -1664,14 +1384,12 @@ void SNA::destroy_twojmax_arrays()
   if (bzero_flag)
     memory->destroy(bzero);
 
-  if(!use_shared_arrays) {
-    memory->destroy(uarraytot_r);
-    memory->destroy(zarray_r);
-    memory->destroy(uarraytot_i);
-    memory->destroy(zarray_i);
-    memory->destroy(yarray_r);
-    memory->destroy(yarray_i);
-  }
+  memory->destroy(uarraytot_r);
+  memory->destroy(zarray_r);
+  memory->destroy(uarraytot_i);
+  memory->destroy(zarray_i);
+  memory->destroy(yarray_r);
+  memory->destroy(yarray_i);
 }
 
 /* ----------------------------------------------------------------------
