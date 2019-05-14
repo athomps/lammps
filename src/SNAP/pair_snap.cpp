@@ -384,7 +384,7 @@ void PairSNAP::coeff(int narg, char **arg)
 
   snaptr = new SNA(lmp,rfac0,twojmax,
                    diagonalstyle, 0 /*use_shared_arrays*/,
-                   rmin0,switchflag,bzeroflag,
+                   rmin0,switchflag,bzeroflag,bnormflag,
                    alloyflag,wselfallflag,nelements);
   
   if (ncoeff != snaptr->ncoeff) {
@@ -583,6 +583,7 @@ void PairSNAP::read_param_file(char *paramfilename)
   diagonalstyle = 3;
   switchflag = 1;
   bzeroflag = 1;
+  bnormflag = 1;
   quadraticflag = 0;
   alloyflag = 1;
   wselfallflag = 0;
@@ -653,6 +654,8 @@ void PairSNAP::read_param_file(char *paramfilename)
       switchflag = atoi(keyval);
     else if (strcmp(keywd,"bzeroflag") == 0)
       bzeroflag = atoi(keyval);
+    else if (strcmp(keywd,"bnormflag") == 0)
+      bnormflag = atoi(keyval);
     else if (strcmp(keywd,"quadraticflag") == 0)
       quadraticflag = atoi(keyval);
     else if (strcmp(keywd,"alloyflag") == 0)

@@ -25,7 +25,6 @@
 #include "comm.h"
 #include "memory.h"
 #include "error.h"
-#include "openmp_snap.h"
 
 using namespace LAMMPS_NS;
 
@@ -34,7 +33,7 @@ ComputeSNAAtom::ComputeSNAAtom(LAMMPS *lmp, int narg, char **arg) :
   radelem(NULL), wjelem(NULL), map(NULL)
 {
   double rmin0, rfac0;
-  int twojmax, switchflag, bzeroflag;
+  int twojmax, switchflag, bzeroflag, bnormflag;
 
   int ntypes = atom->ntypes;
   int nargmin = 6+2*ntypes;
@@ -47,6 +46,7 @@ ComputeSNAAtom::ComputeSNAAtom(LAMMPS *lmp, int narg, char **arg) :
   rmin0 = 0.0;
   switchflag = 1;
   bzeroflag = 1;
+  bnormflag = 1;
   quadraticflag = 0;
   alloyflag = 1;
   wselfallflag = 0;
@@ -107,6 +107,11 @@ ComputeSNAAtom::ComputeSNAAtom(LAMMPS *lmp, int narg, char **arg) :
         error->all(FLERR,"Illegal compute sna/atom command");
       bzeroflag = atoi(arg[iarg+1]);
       iarg += 2;
+    } else if (strcmp(arg[iarg],"bnormflag") == 0) {
+      if (iarg+2 > narg)
+        error->all(FLERR,"Illegal compute sna/atom command");
+      bnormflag = atoi(arg[iarg+1]);
+      iarg += 2;
     } else if (strcmp(arg[iarg],"quadraticflag") == 0) {
       if (iarg+2 > narg)
         error->all(FLERR,"Illegal compute sna/atom command");
@@ -134,21 +139,11 @@ ComputeSNAAtom::ComputeSNAAtom(LAMMPS *lmp, int narg, char **arg) :
     } else error->all(FLERR,"Illegal compute sna/atom command");
   }
 
-  nthreads = comm->nthreads;
-  snaptr = new SNA*[nthreads];
-#if defined(_OPENMP)
-#pragma omp parallel default(none) shared(lmp,rfac0,twojmax,rmin0,switchflag,bzeroflag)
-#endif
-  {
-    int tid = omp_get_thread_num();
+  snaptr = new SNA(lmp,rfac0,twojmax,diagonalstyle,
+                   0 /*use_shared_arrays*/, rmin0,switchflag,bzeroflag,
+                   bnormflag, alloyflag,wselfallflag,nelements);
 
-    // always unset use_shared_arrays since it does not work with computes
-    snaptr[tid] = new SNA(lmp,rfac0,twojmax,diagonalstyle,
-                          0 /*use_shared_arrays*/, rmin0,switchflag,bzeroflag,
-                          alloyflag,wselfallflag,nelements);
-  }
-
-  ncoeff = snaptr[0]->ncoeff;
+  ncoeff = snaptr->ncoeff;
   size_peratom_cols = ncoeff;
   
   if (quadraticflag) size_peratom_cols += (ncoeff*(ncoeff+1))/2;
@@ -170,9 +165,7 @@ ComputeSNAAtom::~ComputeSNAAtom()
   memory->destroy(cutsq);
   memory->destroy(map);
 
-  for (int tid = 0; tid<nthreads; tid++)
-    delete snaptr[tid];
-  delete [] snaptr;
+  delete snaptr;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -199,13 +192,8 @@ void ComputeSNAAtom::init()
     if (strcmp(modify->compute[i]->style,"sna/atom") == 0) count++;
   if (count > 1 && comm->me == 0)
     error->warning(FLERR,"More than one compute sna/atom");
-#if defined(_OPENMP)
-#pragma omp parallel default(none)
-#endif
-  {
-    int tid = omp_get_thread_num();
-    snaptr[tid]->init();
-  }
+
+  snaptr->init();
 }
 
 /* ---------------------------------------------------------------------- */
@@ -246,11 +234,7 @@ void ComputeSNAAtom::compute_peratom()
   double** const x = atom->x;
   const int* const mask = atom->mask;
 
-#if defined(_OPENMP)
-#pragma omp parallel for default(none)
-#endif
   for (int ii = 0; ii < inum; ii++) {
-    const int tid = omp_get_thread_num();
     const int i = ilist[ii];
     if (mask[i] & groupbit) {
 
@@ -265,7 +249,7 @@ void ComputeSNAAtom::compute_peratom()
 
       // insure rij, inside, and typej  are of size jnum
 
-      snaptr[tid]->grow_rij(jnum);
+      snaptr->grow_rij(jnum);
 
       // rij[][3] = displacements between atom I and those neighbors
       // inside = indices of neighbors of I within cutoff
@@ -283,27 +267,27 @@ void ComputeSNAAtom::compute_peratom()
         int jtype = type[j];
         int jelem = map[jtype];
         if (rsq < cutsq[itype][jtype] && rsq>1e-20) {
-          snaptr[tid]->rij[ninside][0] = delx;
-          snaptr[tid]->rij[ninside][1] = dely;
-          snaptr[tid]->rij[ninside][2] = delz;
-          snaptr[tid]->inside[ninside] = j;
-          snaptr[tid]->wj[ninside] = wjelem[jtype];
-          snaptr[tid]->rcutij[ninside] = (radi+radelem[jtype])*rcutfac;
-          snaptr[tid]->element[ninside] = jelem; // element index for multi-element snap
+          snaptr->rij[ninside][0] = delx;
+          snaptr->rij[ninside][1] = dely;
+          snaptr->rij[ninside][2] = delz;
+          snaptr->inside[ninside] = j;
+          snaptr->wj[ninside] = wjelem[jtype];
+          snaptr->rcutij[ninside] = (radi+radelem[jtype])*rcutfac;
+          snaptr->element[ninside] = jelem; // element index for multi-element snap
           ninside++;
         }
       }
 
-      snaptr[tid]->compute_ui(ninside, ielem);
-      snaptr[tid]->compute_zi();
-      snaptr[tid]->compute_bi(ielem);
-      snaptr[tid]->copy_bi2bvec();
+      snaptr->compute_ui(ninside, ielem);
+      snaptr->compute_zi();
+      snaptr->compute_bi(ielem);
+      snaptr->copy_bi2bvec();
       for (int icoeff = 0; icoeff < ncoeff; icoeff++)
-        sna[i][icoeff] = snaptr[tid]->bvec[icoeff];
+        sna[i][icoeff] = snaptr->bvec[icoeff];
       if (quadraticflag) {
         int ncount = ncoeff;
         for (int icoeff = 0; icoeff < ncoeff; icoeff++) {
-          double bi = snaptr[tid]->bvec[icoeff];
+          double bi = snaptr->bvec[icoeff];
 
           // diagonal element of quadratic matrix
 
@@ -312,7 +296,7 @@ void ComputeSNAAtom::compute_peratom()
           // upper-triangular elements of quadratic matrix
 
           for (int jcoeff = icoeff+1; jcoeff < ncoeff; jcoeff++)
-            sna[i][ncount++] = bi*snaptr[tid]->bvec[jcoeff];
+            sna[i][ncount++] = bi*snaptr->bvec[jcoeff];
         }
       }
     } else {
@@ -331,7 +315,7 @@ double ComputeSNAAtom::memory_usage()
   double bytes = nmax*size_peratom_cols * sizeof(double);
   bytes += 3*njmax*sizeof(double);
   bytes += njmax*sizeof(int);
-  bytes += snaptr[0]->memory_usage()*comm->nthreads;
+  bytes += snaptr->memory_usage();
   return bytes;
 }
 

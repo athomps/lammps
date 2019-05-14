@@ -46,10 +46,9 @@ class ComputeSNAVAtom : public Compute {
   double *wjelem;
   int *map;  // map types to [0,nelements)
   int nelements, alloyflag, wselfallflag;
-  class SNA** snaptr;
+  class SNA* snaptr;
   double cutmax;
   int quadraticflag;
-  int nthreads;
 };
 
 }

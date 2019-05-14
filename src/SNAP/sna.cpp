@@ -114,7 +114,7 @@ using namespace MathConst;
 
 SNA::SNA(LAMMPS* lmp, double rfac0_in,
          int twojmax_in, int diagonalstyle_in, int use_shared_arrays_in,
-         double rmin0_in, int switch_flag_in, int bzero_flag_in, 
+         double rmin0_in, int switch_flag_in, int bzero_flag_in, int bnorm_flag_in,
          int alloy_flag_in, int wselfall_flag_in, int nelements_in) : Pointers(lmp)
 {
   wself = 1.0;
@@ -124,6 +124,7 @@ SNA::SNA(LAMMPS* lmp, double rfac0_in,
   rmin0 = rmin0_in;
   switch_flag = switch_flag_in;
   bzero_flag = bzero_flag_in;
+  bnorm_flag = bnorm_flag_in;
   alloy_flag = alloy_flag_in;
   wselfall_flag = wselfall_flag_in;
   nelements = nelements_in;
@@ -435,7 +436,8 @@ void SNA::compute_yi(double* beta)
     const int j2 = idxj[jjb].j2;
     const int j3 = idxj[jjb].j;
     double betaj = beta[idxb_count];
-
+    if (!bnorm_flag) betaj *= j3+1;
+ 
     j = j3;
     ielem = elem3;
     idouble = elem1*nelements+elem2;
@@ -613,7 +615,6 @@ void SNA::compute_bi(int ielem)
       } // end loop over JJ
     } else {
       int itriple = 0;
-      int idouble = 0;
       for(int elem1 = 0; elem1 < nelements; elem1++)
       for(int elem2 = 0; elem2 < nelements; elem2++) {
       for(int elem3 = 0; elem3 < nelements; elem3++) {
@@ -625,9 +626,24 @@ void SNA::compute_bi(int ielem)
         } // end loop over JJ
         itriple++;
       } // end loop over elem3
-      idouble++;
       } // end loop over elem1,elem2
     }
+  }
+
+  if (!bnorm_flag) {
+    int itriple = 0;
+    for(int elem1 = 0; elem1 < nelements; elem1++)
+    for(int elem2 = 0; elem2 < nelements; elem2++) {
+    for(int elem3 = 0; elem3 < nelements; elem3++) {
+      for(int JJ = 0; JJ < idxj_max; JJ++) {
+        const int j1 = idxj[JJ].j1;
+        const int j2 = idxj[JJ].j2;
+        const int j = idxj[JJ].j;
+        barray[itriple][j1][j2][j] *= j+1;
+      } // end loop over JJ
+      itriple++;
+    } // end loop over elem3
+    } // end loop over elem1,elem2
   }
 }
 
