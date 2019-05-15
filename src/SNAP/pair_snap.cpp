@@ -174,6 +174,26 @@ void PairSNAP::compute(int eflag, int vflag)
       snaptr->compute_duidrj(snaptr->rij[jj],snaptr->wj[jj],
                              snaptr->rcutij[jj],snaptr->element[jj]);
 
+//       // Begin old style 
+
+//       snaptr->compute_dbidrj();
+//       snaptr->copy_dbi2dbvec();
+
+//       fij[0] = 0.0;
+//       fij[1] = 0.0;
+//       fij[2] = 0.0;
+
+//       // linear contributions
+
+//       for (int k = 1; k <= ncoeff; k++) {
+//         double bgb = coeffi[k];
+//         fij[0] += bgb*snaptr->dbvec[k-1][0];
+//         fij[1] += bgb*snaptr->dbvec[k-1][1];
+//         fij[2] += bgb*snaptr->dbvec[k-1][2];
+//       }
+
+//       // End old style 
+
 //       // quadratic contributions
 
 //       if (quadraticflag) {
