@@ -135,6 +135,8 @@ ComputeSNAAtom::ComputeSNAAtom(LAMMPS *lmp, int narg, char **arg) :
       if (iarg+2 > narg)
         error->all(FLERR,"Illegal compute sna/atom command");
       wselfallflag = atoi(arg[iarg+1]);
+      if (wselfallflag < 0 || wselfallflag > 2)
+        error->all(FLERR,"Illegal compute sna/atom command");
       iarg += 2;
     } else error->all(FLERR,"Illegal compute sna/atom command");
   }

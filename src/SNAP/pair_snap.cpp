@@ -680,9 +680,11 @@ void PairSNAP::read_param_file(char *paramfilename)
       quadraticflag = atoi(keyval);
     else if (strcmp(keywd,"alloyflag") == 0)
       alloyflag = atoi(keyval);
-    else if (strcmp(keywd,"wselfallflag") == 0)
+    else if (strcmp(keywd,"wselfallflag") == 0) {
       wselfallflag = atoi(keyval);
-    else
+      if (wselfallflag < 0 || wselfallflag > 2)
+        error->all(FLERR,"Incorrect SNAP parameter file");
+    } else
       error->all(FLERR,"Incorrect SNAP parameter file");
   }
 

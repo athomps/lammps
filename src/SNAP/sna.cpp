@@ -117,8 +117,6 @@ SNA::SNA(LAMMPS* lmp, double rfac0_in,
          double rmin0_in, int switch_flag_in, int bzero_flag_in, int bnorm_flag_in,
          int alloy_flag_in, int wselfall_flag_in, int nelements_in) : Pointers(lmp)
 {
-  wself = 1.0;
-
   use_shared_arrays = use_shared_arrays_in;
   rfac0 = rfac0_in;
   rmin0 = rmin0_in;
@@ -128,6 +126,11 @@ SNA::SNA(LAMMPS* lmp, double rfac0_in,
   alloy_flag = alloy_flag_in;
   wselfall_flag = wselfall_flag_in;
   nelements = nelements_in;
+
+  if (wselfall_flag == 2)
+    wself = 1.0/nelements;
+  else
+    wself = 1.0;
 
   if (!alloy_flag)
     error->all(FLERR, "alloy_flag must be turned on");
