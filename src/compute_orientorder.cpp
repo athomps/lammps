@@ -16,7 +16,7 @@
                          Axel Kohlmeyer (Temple U)
 ------------------------------------------------------------------------- */
 
-#include "compute_orientorder_atom.h"
+#include "compute_orientorder.h"
 
 #include "atom.h"
 #include "comm.h"
@@ -50,7 +50,7 @@ using namespace MathSpecial;
 
 /* ---------------------------------------------------------------------- */
 
-ComputeOrientOrderAtom::ComputeOrientOrderAtom(LAMMPS *lmp, int narg, char **arg) :
+ComputeOrientOrder::ComputeOrientOrder(LAMMPS *lmp, int narg, char **arg) :
   Compute(lmp, narg, arg),
   qlist(nullptr), distsq(nullptr), nearest(nullptr), rlist(nullptr),
   qnarray(nullptr), qnm_r(nullptr), qnm_i(nullptr), cglist(nullptr)
@@ -170,8 +170,9 @@ ComputeOrientOrderAtom::ComputeOrientOrderAtom(LAMMPS *lmp, int narg, char **arg
   if (wlhatflag) ncol += nqlist;
   if (qlcompflag) ncol += 2*(2*qlcomp+1);
 
-  peratom_flag = 1;
-  size_peratom_cols = ncol;
+  vector_flag = 1;
+  size_vector = ncol;
+  vector = new double[size_vector];
 
   nmax = 0;
   maxneigh = 0;
@@ -179,10 +180,11 @@ ComputeOrientOrderAtom::ComputeOrientOrderAtom(LAMMPS *lmp, int narg, char **arg
 
 /* ---------------------------------------------------------------------- */
 
-ComputeOrientOrderAtom::~ComputeOrientOrderAtom()
+ComputeOrientOrder::~ComputeOrientOrder()
 {
   if (copymode) return;
 
+  delete [] vector;
   memory->destroy(qnarray);
   memory->destroy(distsq);
   memory->destroy(rlist);
@@ -195,7 +197,7 @@ ComputeOrientOrderAtom::~ComputeOrientOrderAtom()
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeOrientOrderAtom::init()
+void ComputeOrientOrder::init()
 {
   if (force->pair == nullptr)
     error->all(FLERR,"Compute orientorder/atom requires a "
@@ -228,14 +230,14 @@ void ComputeOrientOrderAtom::init()
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeOrientOrderAtom::init_list(int /*id*/, NeighList *ptr)
+void ComputeOrientOrder::init_list(int /*id*/, NeighList *ptr)
 {
   list = ptr;
 }
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeOrientOrderAtom::compute_peratom()
+void ComputeOrientOrder::compute_vector()
 {
   int i,j,ii,jj,inum,jnum;
   double xtmp,ytmp,ztmp,delx,dely,delz,rsq;
@@ -337,7 +339,7 @@ void ComputeOrientOrderAtom::compute_peratom()
    memory usage of local atom-based array
 ------------------------------------------------------------------------- */
 
-double ComputeOrientOrderAtom::memory_usage()
+double ComputeOrientOrder::memory_usage()
 {
   double bytes = (double)ncol*nmax * sizeof(double);
   bytes += (double)(qmax*(2*qmax+1)+maxneigh*4) * sizeof(double);
@@ -369,7 +371,7 @@ double ComputeOrientOrderAtom::memory_usage()
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeOrientOrderAtom::select3(int k, int n, double *arr, int *iarr, double **arr3)
+void ComputeOrientOrder::select3(int k, int n, double *arr, int *iarr, double **arr3)
 {
   int i,ir,j,l,mid,ia,itmp;
   double a,tmp,a3[3];
@@ -442,7 +444,7 @@ void ComputeOrientOrderAtom::select3(int k, int n, double *arr, int *iarr, doubl
    calculate the bond orientational order parameters
 ------------------------------------------------------------------------- */
 
-void ComputeOrientOrderAtom::calc_boop(double **rlist,
+void ComputeOrientOrder::calc_boop(double **rlist,
                                        int ncount, double qn[],
                                        int qlist[], int nqlist) {
 
@@ -605,7 +607,7 @@ void ComputeOrientOrderAtom::calc_boop(double **rlist,
    calculate scalar distance
 ------------------------------------------------------------------------- */
 
-double ComputeOrientOrderAtom::dist(const double r[])
+double ComputeOrientOrder::dist(const double r[])
 {
   return sqrt(r[0]*r[0] + r[1]*r[1] + r[2]*r[2]);
 }
@@ -615,7 +617,7 @@ double ComputeOrientOrderAtom::dist(const double r[])
    Y_l^m (theta, phi) = prefactor(l, m, cos(theta)) * exp(i*m*phi)
 ------------------------------------------------------------------------- */
 
-double ComputeOrientOrderAtom::polar_prefactor(int l, int m, double costheta)
+double ComputeOrientOrder::polar_prefactor(int l, int m, double costheta)
 {
   const int mabs = abs(m);
 
@@ -636,7 +638,7 @@ double ComputeOrientOrderAtom::polar_prefactor(int l, int m, double costheta)
    sign convention: P(l,l) = (2l-1)!!(-sqrt(1-x^2))^l
 ------------------------------------------------------------------------- */
 
-double ComputeOrientOrderAtom::associated_legendre(int l, int m, double x)
+double ComputeOrientOrder::associated_legendre(int l, int m, double x)
 {
   if (l < m) return 0.0;
 
@@ -664,7 +666,7 @@ double ComputeOrientOrderAtom::associated_legendre(int l, int m, double x)
    specialized for case j1=j2=j=l
 ------------------------------------------------------------------------- */
 
-void ComputeOrientOrderAtom::init_clebsch_gordan()
+void ComputeOrientOrder::init_clebsch_gordan()
 {
   double sum,dcg,sfaccg, sfac1, sfac2;
   int m, aa2, bb2, cc2;

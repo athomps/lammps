@@ -13,24 +13,24 @@
 
 #ifdef COMPUTE_CLASS
 
-ComputeStyle(orientorder/atom,ComputeOrientOrderAtom)
+ComputeStyle(orientorder,ComputeOrientOrder)
 
 #else
 
-#ifndef LMP_COMPUTE_ORIENTORDER_ATOM_H
-#define LMP_COMPUTE_ORIENTORDER_ATOM_H
+#ifndef LMP_COMPUTE_ORIENTORDER_H
+#define LMP_COMPUTE_ORIENTORDER_H
 
 #include "compute.h"
 
 namespace LAMMPS_NS {
 
-class ComputeOrientOrderAtom : public Compute {
+class ComputeOrientOrder : public Compute {
  public:
-  ComputeOrientOrderAtom(class LAMMPS *, int, char **);
-  ~ComputeOrientOrderAtom();
+  ComputeOrientOrder(class LAMMPS *, int, char **);
+  ~ComputeOrientOrder();
   virtual void init();
   void init_list(int, class NeighList *);
-  virtual void compute_peratom();
+  virtual void compute_vector();
   double memory_usage();
   double cutsq;
   int iqlcomp, qlcomp, normflag, qlcompflag, wlflag, wlhatflag;
