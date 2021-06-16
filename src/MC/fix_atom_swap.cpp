@@ -81,8 +81,7 @@ FixAtomSwap::FixAtomSwap(LAMMPS *lmp, int narg, char **arg) :
   if (seed <= 0) error->all(FLERR,"Illegal fix atom/swap command");
 
   memory->create(type_list,atom->ntypes,"atom/swap:type_list");
-  memory->create(mu,atom->ntypes+1,"atom/swap:mu");
-  for (int i = 1; i <= atom->ntypes; i++) mu[i] = 0.0;
+  memory->create(mu,atom->ntypes,"atom/swap:mu");
 
   // read options from end of input line
 
@@ -181,13 +180,17 @@ void FixAtomSwap::options(int narg, char **arg)
         iarg++;
       }
     } else if (strcmp(arg[iarg],"mu") == 0) {
-      if (iarg+2 > narg) error->all(FLERR,"Illegal fix atom/swap command");
+
+      // require that types keyword appear before mu keyword
+
+      if (nswaptypes == 0) error->all(FLERR,"Illegal fix atom/swap command");
+      if (iarg+3 > narg) error->all(FLERR,"Illegal fix atom/swap command");
       iarg++;
       while (iarg < narg) {
         if (isalpha(arg[iarg][0])) break;
         nmutypes++;
-        if (nmutypes > atom->ntypes) error->all(FLERR,"Illegal fix atom/swap command");
-        mu[nmutypes] = utils::numeric(FLERR,arg[iarg],false,lmp);
+        if (nmutypes >= nswaptypes) error->all(FLERR,"Illegal fix atom/swap command");
+        mu[type_list[nmutypes]] = utils::numeric(FLERR,arg[iarg],false,lmp);
         iarg++;
       }
     } else error->all(FLERR,"Illegal fix atom/swap command");
