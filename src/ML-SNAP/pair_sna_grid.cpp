@@ -138,7 +138,7 @@ void PairSNAGrid::compute(int eflag, int vflag)
 	    snaptr->inside[ninside] = j;
 	    snaptr->wj[ninside] = wjelem[jtype];
 	    snaptr->rcutij[ninside] = 2.0*radelem[jtype]*rcutfac;
-	    snaptr->element[ninside] = jelem; // element index for multi-element snap
+	    if (chemflag) snaptr->element[ninside] = jelem; // element index for multi-element snap
 	    ninside++;
 	  }
 	}
