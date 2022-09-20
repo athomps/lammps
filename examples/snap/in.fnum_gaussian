@@ -1,0 +1,57 @@
+# Demonstrate pair style base on gaussian/grid
+# Check numerical forces
+
+variable nrep index 1
+variable a index 3.0
+variable ngrid index 2
+variable del index 0.1
+variable fdelta index 0.0001
+
+units		metal
+
+atom_modify map yes
+
+# generate the box and atom positions using a BCC lattice
+
+variable nx equal ${nrep}
+variable ny equal ${nrep}
+variable nz equal ${nrep}
+
+boundary	p p p
+
+lattice		custom $a &
+		a1 1 0 0 &
+		a2 0 1 0  &
+		a3 0 0 1 &
+		basis 0 0 0 &
+		basis 0.5 0.5 0.5 &
+#		origin 0.25 0.25 0.25
+#		origin 0.25e-3 0.25e-3 0.25e-3
+
+region		box block 0 ${nx} 0 ${ny} 0 ${nz}
+create_box	2 box
+create_atoms	1 box basis 1 1 basis 2 2
+mass * 180.88
+displace_atoms  all random ${del} ${del} ${del} 12345 
+
+# define atom compute and grid compute
+
+variable 	rcutfac equal 4.67637
+variable 	radelem1 equal 0.5
+variable 	radelem2 equal 0.5
+variable	sigmaelem1 equal 0.1355
+variable	sigmaelem2 equal 0.2
+variable 	gaussian_options string &
+		"${rcutfac} ${radelem1} ${radelem2} ${sigmaelem1} ${sigmaelem2}"
+
+pair_style gaussian/grid grid ${ngrid} ${ngrid} ${ngrid} &
+	 	${gaussian_options}
+
+pair_coeff * * Al Al
+
+fix fnum all numdiff 1 ${fdelta}
+variable ferrsq atom (fx-f_fnum[1])^2+(fy-f_fnum[2])^2+(fz-f_fnum[3])^2
+compute faverrsq all reduce ave v_ferrsq
+thermo_style custom c_faverrsq
+
+run 0
