@@ -78,7 +78,7 @@ enum{DONE,ADD,SUBTRACT,MULTIPLY,DIVIDE,CARAT,MODULO,UNARY,
      RANDOM,NORMAL,CEIL,FLOOR,ROUND,TERNARY,
      RAMP,STAGGER,LOGFREQ,LOGFREQ2,LOGFREQ3,STRIDE,STRIDE2,
      VDISPLACE,SWIGGLE,CWIGGLE,SIGN,GMASK,RMASK,
-     GRMASK,IS_ACTIVE,IS_DEFINED,IS_AVAILABLE,IS_FILE,EXTRACT_SETTING,
+     GRMASK,VXMASK,IS_ACTIVE,IS_DEFINED,IS_AVAILABLE,IS_FILE,EXTRACT_SETTING,
      VALUE,ATOMARRAY,TYPEARRAY,INTARRAY,BIGINTARRAY,VECTORARRAY};
 
 // customize by adding a special function
@@ -2594,7 +2594,7 @@ double Variable::evaluate(char *str, Tree **tree, int ivar)
      atan2(y,x),random(x,y,z),normal(x,y,z),ceil(),floor(),round(),ternary(x,y,z),
      ramp(x,y),stagger(x,y),logfreq(x,y,z),logfreq2(x,y,z),
      logfreq3(x,y,z),stride(x,y,z),stride2(x,y,z,a,b,c),vdisplace(x,y),swiggle(x,y,z),
-     cwiggle(x,y,z),sign(x),gmask(x),rmask(x),grmask(x,y)
+     cwiggle(x,y,z),sign(x),gmask(x),rmask(x),grmask(x,y),vxmask(x,y)
 ---------------------------------------------------------------------- */
 
 double Variable::collapse_tree(Tree *tree)
@@ -3157,6 +3157,7 @@ double Variable::collapse_tree(Tree *tree)
   if (tree->type == GMASK) return 0.0;
   if (tree->type == RMASK) return 0.0;
   if (tree->type == GRMASK) return 0.0;
+  if (tree->type == VXMASK) return 0.0;
 
   return 0.0;
 }
@@ -3170,7 +3171,8 @@ double Variable::collapse_tree(Tree *tree)
      atan2(y,x),random(x,y,z),normal(x,y,z),ceil(),floor(),round(),ternary(x,y,z),
      ramp(x,y),stagger(x,y),logfreq(x,y,z),logfreq2(x,y,z),
      logfreq3(x,y,z),stride(x,y,z),stride2(x,y,z,a,b,c),vdisplace(x,y),
-     swiggle(x,y,z),cwiggle(x,y,z),sign(x),gmask(x),rmask(x),grmask(x,y)
+     swiggle(x,y,z),cwiggle(x,y,z),sign(x),gmask(x),rmask(x),grmask(x,y),
+     vxmask(x,y)
 ---------------------------------------------------------------------- */
 
 double Variable::eval_tree(Tree *tree, int i)
@@ -3502,6 +3504,11 @@ double Variable::eval_tree(Tree *tree, int i)
   if (tree->type == GRMASK) {
     if ((atom->mask[i] & tree->ivalue) &&
         (tree->region->match(atom->x[i][0], atom->x[i][1], atom->x[i][2]))) return 1.0;
+    else return 0.0;
+  }
+
+  if (tree->type == VXMASK) {
+    if (atom->v[i][0] > tree->value && atom->v[i][0] < tree->value2)  return 1.0;
     else return 0.0;
   }
 
@@ -4345,7 +4352,7 @@ Region *Variable::region_function(char *id, int ivar)
    return 0 if not a match, 1 if successfully processed
    customize by adding a special function:
      sum(x),min(x),max(x),ave(x),trap(x),slope(x),
-     gmask(x),rmask(x),grmask(x,y),next(x),is_file(x),is_os(x),
+     gmask(x),rmask(x),grmask(x,y),vxmask(x,y),next(x),is_file(x),is_os(x),
      extract_setting(x),label2type(x,y),is_tpelabel(x,y)
      is_timeout()
 ------------------------------------------------------------------------- */
@@ -4354,7 +4361,7 @@ Region *Variable::region_function(char *id, int ivar)
 
 static const std::unordered_map<std::string,int> special_function_map = {
   {"sum", SUM}, {"min", XMIN}, {"max", XMAX}, {"ave", AVE}, {"trap", TRAP}, {"slope", SLOPE},
-  {"sort", SORT}, {"rsort", RSORT}, {"gmask", NOVECTOR}, {"rmask", NOVECTOR}, {"grmask", NOVECTOR},
+  {"sort", SORT}, {"rsort", RSORT}, {"gmask", NOVECTOR}, {"rmask", NOVECTOR}, {"grmask", NOVECTOR},  {"vxmask", NOVECTOR},
   {"next", NOVECTOR}, {"is_file", NOVECTOR}, {"is_os", NOVECTOR}, {"extract_setting", NOVECTOR},
   {"label2type", NOVECTOR}, {"is_typelabel", NOVECTOR}, {"is_timeout", NOVECTOR} };
 
@@ -4733,6 +4740,21 @@ int Variable::special_function(const std::string &word, char *contents, Tree **t
     newtree->type = GRMASK;
     newtree->ivalue = group->bitmask[igroup];
     newtree->region = region;
+    treestack[ntreestack++] = newtree;
+
+  } else if (word == "vxmask") {
+    if (tree == nullptr)
+      print_var_error(FLERR,"Vxmask function in equal-style variable formula",ivar);
+    if (narg != 2)
+      print_var_error(FLERR,"Invalid special function in variable formula",ivar);
+
+    double vxlo = utils::numeric(FLERR,args[0],false,lmp);
+    double vxhi = utils::numeric(FLERR,args[1],false,lmp);
+
+    auto newtree = new Tree();
+    newtree->type = VXMASK;
+    newtree->value = vxlo;
+    newtree->value2 = vxhi;
     treestack[ntreestack++] = newtree;
 
   // special function for file-style or atomfile-style variables

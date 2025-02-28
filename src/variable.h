@@ -110,6 +110,7 @@ class Variable : protected Pointers {
 
   struct Tree {              // parse tree for atom-style or vector-style vars
     double value;            // single scalar
+    double value2;           // second scalar needed by vxmask()
     double *array;           // per-atom or per-type list of doubles
     int *iarray;             // per-atom list of ints
     bigint *barray;          // per-atom list of bigints
